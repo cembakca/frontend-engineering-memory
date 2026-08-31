@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "name": "repository profile by Next major",
+      "query": "Next.js 16 repositories",
+      "repository": "hangikredi.aboutus.fe.next",
+      "expected": {
+        "subjectIncludes": "hangikredi.aboutus.fe.next",
+        "type": "repository_profile",
+        "channel": "sql"
+      }
+    },
+    {
+      "name": "root route exact lookup",
+      "query": "route /?",
+      "repository": "hangikredi.aboutus.fe.next",
+      "expected": {
+        "subjectIncludes": "route:/",
+        "type": "rendering",
+        "channel": "sql"
+      }
+    },
+    {
+      "name": "configuration exact term",
+      "query": "GATEWAY_URL configuration",
+      "repository": "hangikredi.aboutus.fe.next",
+      "expected": {
+        "subjectIncludes": "GATEWAY_URL",
+        "type": "configuration",
+        "channel": "fts"
+      }
+    }
+  ]
+}

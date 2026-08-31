@@ -1,0 +1,10 @@
+{
+  "repositories": [
+    {
+      "name": "hangikredi.aboutus.fe.next",
+      "path": "../hangikredi.aboutus.fe.next",
+      "mainBranch": "main",
+      "managedCheckout": false
+    }
+  ]
+}

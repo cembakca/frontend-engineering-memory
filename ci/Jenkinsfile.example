@@ -1,0 +1,19 @@
+pipeline {
+  agent any
+
+  stages {
+    stage('Notify Frontend Engineering Memory') {
+      when {
+        branch 'main'
+      }
+      steps {
+        sh '''
+          curl --fail --silent --show-error \
+            -X POST "$FRONTEND_MEMORY_URL/sync" \
+            -H 'content-type: application/json' \
+            -d "{\\"repository\\":\\"${JOB_BASE_NAME}\\",\\"commit\\":\\"${GIT_COMMIT}\\"}"
+        '''
+      }
+    }
+  }
+}

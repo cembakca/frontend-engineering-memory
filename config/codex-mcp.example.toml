@@ -1,0 +1,8 @@
+[mcp_servers.frontend_memory]
+command = "node"
+args = ["/ABSOLUTE/PATH/frontend-engineering-memory/dist/mcp/server.js"]
+env = { MEMORY_DB_PATH = "/ABSOLUTE/PATH/frontend-engineering-memory/data/engineering-memory.sqlite", MEMORY_REPOSITORIES_FILE = "/ABSOLUTE/PATH/frontend-engineering-memory/config/repositories.json", MEMORY_EMBEDDINGS_ENABLED = "1" }
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+enabled = true
+default_tools_approval_mode = "auto"

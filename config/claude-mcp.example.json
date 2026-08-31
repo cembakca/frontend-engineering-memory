@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "frontend-memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/frontend-engineering-memory/dist/mcp/server.js"
+      ],
+      "env": {
+        "MEMORY_DB_PATH": "/ABSOLUTE/PATH/frontend-engineering-memory/data/engineering-memory.sqlite",
+        "MEMORY_REPOSITORIES_FILE": "/ABSOLUTE/PATH/frontend-engineering-memory/config/repositories.json",
+        "MEMORY_EMBEDDINGS_ENABLED": "1"
+      }
+    }
+  }
+}
