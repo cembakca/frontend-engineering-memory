@@ -4,6 +4,8 @@ data/*.sqlite
 data/*.sqlite-*
 .models/
 .env
+config/repositories.json
+eval-results/
 .DS_Store
 # Yarn PnP artifacts: this project uses pnpm with node_modules.
 # A stray .pnp.cjs makes pnpm inject --require=<abs path>, which breaks on paths containing spaces.

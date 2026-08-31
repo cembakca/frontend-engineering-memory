@@ -1,5 +1,6 @@
 import { embeddingsEnabled } from "../config.js";
 import type { MemoryDatabase } from "../memory/database.js";
+import { routesEquivalent } from "./route-identity.js";
 import type { MemoryType, RetrievalQuery, SearchResult } from "../types.js";
 import { understandQuery } from "./understand.js";
 import { canonicalEntityKey, rankAndDedupe } from "./ranking.js";
@@ -42,10 +43,11 @@ function sqlResults(memoryDb:MemoryDatabase,query:RetrievalQuery,limit:number):S
       SELECT r.id,repo.name repository,r.route,r.router_type,r.route_type,r.rendering_mode,r.source_file,
              r.last_seen_sha,r.backend_dependencies_json,r.cache_behavior_json,repo.last_indexed_sha repository_sha
       FROM routes r JOIN repositories repo ON repo.id=r.repository_id
-      WHERE r.active=1 ${query.repository ? "AND repo.name=?" : ""} ${query.route ? "AND r.route=?" : ""}
+      WHERE r.active=1 ${query.repository ? "AND repo.name=?" : ""}
       ORDER BY repo.name,r.route LIMIT ?
-    `).all(...[...(query.repository ? [query.repository] : []),...(query.route ? [query.route] : []),limit]) as any[];
-    out.push(...rows.map((row,index)=>({
+    `).all(...[...(query.repository ? [query.repository] : []),query.route ? 10000 : limit]) as any[];
+    const selected=query.route ? rows.filter((row)=>routesEquivalent(String(row.route),query.route!)).slice(0,limit) : rows;
+    out.push(...selected.map((row,index)=>({
       id:-Number(row.id),repository:row.repository,type:"rendering" as const,subject:`route:${row.route}`,
       content:`Route ${row.route} uses ${row.router_type} router (${row.route_type}), renders as ${row.rendering_mode}; backend dependencies=${row.backend_dependencies_json}; cache=${row.cache_behavior_json}.`,
       sourceFile:row.source_file,commitSha:row.last_seen_sha,repositorySha:row.repository_sha,confidence:"verified",
@@ -118,7 +120,7 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
     if (boostedTypes?.has(result.type)) result.queryTypeBoost=.2;
     const key=canonicalEntityKey(result);
     result.exactAnchorMatch=Boolean(
-      (plan.anchors.route&&key.endsWith(`:route:${plan.anchors.route}`))
+      (plan.anchors.route&&result.subject.startsWith("route:")&&routesEquivalent(result.subject.slice("route:".length),plan.anchors.route))
       ||plan.anchors.config.some((anchor)=>key.endsWith(`:config:${anchor}`))
       ||plan.anchors.files.some((anchor)=>result.sourceFile===anchor||result.subject.startsWith(anchor))
       ||plan.anchors.symbols.some((anchor)=>result.subject===anchor),

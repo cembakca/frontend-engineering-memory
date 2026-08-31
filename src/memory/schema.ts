@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS repositories (
   start_command TEXT,
   dev_command TEXT,
   output_mode TEXT,
+  package_name TEXT,
   last_indexed_sha TEXT,
   last_indexed_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -131,6 +132,17 @@ CREATE TABLE IF NOT EXISTS dependencies (
   UNIQUE(repository_id, dependency_type, name, source_file)
 );
 CREATE INDEX IF NOT EXISTS idx_dependencies_repo ON dependencies(repository_id, active, category);
+
+CREATE TABLE IF NOT EXISTS repository_package_dependencies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+  package_name TEXT NOT NULL,
+  dependency_kind TEXT NOT NULL CHECK(dependency_kind IN ('runtime','development','optional','peer')),
+  source_file TEXT NOT NULL DEFAULT 'package.json',
+  last_seen_sha TEXT,
+  UNIQUE(repository_id, package_name)
+);
+CREATE INDEX IF NOT EXISTS idx_repository_package_dependencies_package ON repository_package_dependencies(package_name, repository_id);
 
 CREATE TABLE IF NOT EXISTS route_dependencies (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

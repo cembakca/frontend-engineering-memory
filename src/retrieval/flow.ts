@@ -1,10 +1,10 @@
 import type { GraphEdge, GraphEdgeType } from "../analyzers/symbol-graph.js";
 
 /** Edges that carry execution. `exports` is structure, not behaviour, so it never appears in a flow. */
-const FLOW_EDGES:GraphEdgeType[]=["calls","submits-to","fetches","renders","reads","references"];
+const FLOW_EDGES:GraphEdgeType[]=["calls","submits-to","fetches","renders","reads","references","tags","invalidates"];
 
 /** Ties on the same line only; line number is the primary order. */
-const EDGE_RANK:Record<string,number>={"calls":0,"submits-to":1,"fetches":2,"renders":3,"reads":4,"references":5};
+const EDGE_RANK:Record<string,number>={"calls":0,"submits-to":1,"fetches":2,"renders":3,"reads":4,"tags":5,"invalidates":6,"references":7};
 
 export interface FlowStep {
   order:number;
@@ -53,7 +53,7 @@ function moduleOf(key:string):string { return key.split("#")[0] ?? key; }
  * detail of one helper, not a step of the flow.
  */
 function isSignificant(edge:GraphEdge):boolean {
-  if (edge.type==="submits-to"||edge.type==="fetches"||edge.type==="reads") return true;
+  if (edge.type==="submits-to"||edge.type==="fetches"||edge.type==="reads"||edge.type==="tags"||edge.type==="invalidates") return true;
   if (edge.type==="references") return false;
   return moduleOf(edge.from)!==moduleOf(edge.to);
 }
@@ -115,7 +115,7 @@ export function traceFlow(edges:GraphEdge[],seed:string,options:FlowOptions={}):
       explored+=1;
       const children=edge.type==="submits-to"
         ? (options.routeEntries?.get(edge.to) ?? []).flatMap((entry)=>explore(entry,depth+1))
-        : edge.type==="reads" ? [] : explore(edge.to,depth+1);
+        : edge.type==="reads"||edge.type==="tags"||edge.type==="invalidates" ? [] : explore(edge.to,depth+1);
       out.push({edge,depth,children});
     }
     return out;

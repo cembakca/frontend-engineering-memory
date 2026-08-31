@@ -47,6 +47,9 @@ export class MemoryDatabase {
   }
 
   private applyMigrations(): void {
+    const repositoryColumns=this.db.prepare("PRAGMA table_info(repositories)").all() as Array<{name:string}>;
+    if (!repositoryColumns.some((column)=>column.name==="package_name")) this.db.exec("ALTER TABLE repositories ADD COLUMN package_name TEXT");
+
     const memoryColumns = this.db.prepare("PRAGMA table_info(memories)").all() as Array<{ name: string }>;
     if (!memoryColumns.some((column) => column.name === "removed_sha")) {
       this.db.exec("ALTER TABLE memories ADD COLUMN removed_sha TEXT");

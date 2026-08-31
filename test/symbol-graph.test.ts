@@ -130,3 +130,20 @@ test("a nested binding never becomes a node, a module-level one always does",asy
   assert.ok(find(edges,"references",(edge)=>edge.from==="src/lib/thing.ts#use"),"the enclosing function holds the edge");
   assert.equal(find(edges,"references",(edge)=>edge.from.endsWith("#local")),undefined,"a nested binding is not a node");
 });
+
+test("classifies Server Functions and connects cache tags and invalidations",async()=>{
+  const edges=await withRepo(async(root)=>{
+    await file(root,"src/app/actions.ts",`"use server";
+import { cacheTag, revalidateTag } from "next/cache";
+async function readProducts(){ cacheTag("products"); return []; }
+async function saveProduct(){ revalidateTag("products", "max"); }
+export { readProducts, saveProduct };`);
+  },["src/app/actions.ts"]);
+
+  const exported=find(edges,"exports",(edge)=>edge.to.endsWith("#saveProduct"));
+  assert.equal(exported?.toKind,"server-function");
+  const tags=find(edges,"tags",(edge)=>edge.from.endsWith("#readProducts"));
+  assert.equal(tags?.to,"tag:products");
+  const invalidates=find(edges,"invalidates",(edge)=>edge.from.endsWith("#saveProduct"));
+  assert.equal(invalidates?.to,"tag:products");
+});

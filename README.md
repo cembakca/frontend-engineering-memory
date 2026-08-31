@@ -1,129 +1,48 @@
 # Frontend Engineering Memory
 
-A central, living technical memory for multiple Next.js repositories.
+Local, evidence-backed technical memory for a fleet of Next.js repositories.
 
-It does **not** generate repository Markdown documentation. It stores current technical facts in SQLite and refreshes them after changes on `main`/`master`.
+Frontend Engineering Memory indexes repository structure and behavior into SQLite, FTS5, and `sqlite-vec`, then exposes a small read-only MCP surface to Codex, Claude, Cursor, and other MCP clients. It is designed to answer repository questions with bounded, source-linked context instead of loading an entire codebase into the model.
 
-## Project documents
+## Highlights
 
-- [Product and technical plan](docs/ENGINEERING_MEMORY_PLAN.md)
-- [Current plan gap analysis](docs/PLAN_GAP_ANALYSIS.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Codex/Claude token-economic usage](docs/AI_USAGE.md)
-- [Repository Context Engine TODO](docs/REPOSITORY_CONTEXT_ENGINE_TODO.md)
-- [Repository Context Engine evaluation contract](docs/REPOSITORY_CONTEXT_ENGINE_EVALUATION.md)
-- [RCE-002 A/B baseline results](docs/REPOSITORY_CONTEXT_ENGINE_BASELINE.md)
-- [RCE-002 live A/B run-book](docs/RCE-002-AB-RUNBOOK.md)
-- [RCE-003 retrieval miss taxonomy](docs/REPOSITORY_CONTEXT_ENGINE_MISS_TAXONOMY.md)
-- [RCE-004 context economy contract](docs/REPOSITORY_CONTEXT_ENGINE_ECONOMY.md)
-- [RCE-005 entity/evidence normalization design](docs/REPOSITORY_CONTEXT_ENGINE_NORMALIZATION.md)
-- [RCE-006 memory acceptance policy](docs/REPOSITORY_CONTEXT_ENGINE_ACCEPTANCE.md)
-- [RCE-007 fact confidence contract](docs/REPOSITORY_CONTEXT_ENGINE_CONFIDENCE.md)
-- [RCE-008 analyzer semantic correctness pack](docs/REPOSITORY_CONTEXT_ENGINE_SEMANTIC_CORRECTNESS.md)
-- [RCE-009 graph ontology](docs/REPOSITORY_CONTEXT_ENGINE_GRAPH_ONTOLOGY.md)
-- [RCE-010 symbol/component graph extraction](docs/REPOSITORY_CONTEXT_ENGINE_SYMBOL_GRAPH.md)
-- [RCE-011 flow traversal](docs/REPOSITORY_CONTEXT_ENGINE_FLOW_TRAVERSAL.md)
-- [RCE-012 change-impact traversal](docs/REPOSITORY_CONTEXT_ENGINE_CHANGE_IMPACT.md)
-- [RCE-013 test/verification graph](docs/REPOSITORY_CONTEXT_ENGINE_TEST_VERIFICATION.md)
-- [RCE-014 task intent model](docs/REPOSITORY_CONTEXT_ENGINE_TASK_INTENT.md)
-- [RCE-015 query planning](docs/REPOSITORY_CONTEXT_ENGINE_QUERY_PLAN.md)
-- [RCE-016 canonical dedupe and ranking](docs/REPOSITORY_CONTEXT_ENGINE_RANKING.md)
-- [RCE-017 typed context-pack schemas](docs/REPOSITORY_CONTEXT_ENGINE_CONTEXT_PACKS.md)
-- [RCE-018 answer contract](docs/REPOSITORY_CONTEXT_ENGINE_ANSWER_CONTRACT.md)
-- [RCE-019 simplified MCP surface](docs/REPOSITORY_CONTEXT_ENGINE_MCP_SURFACE.md)
-- [RCE-020 behavior diff](docs/REPOSITORY_CONTEXT_ENGINE_BEHAVIOR_DIFF.md)
-- [RCE-021 point-in-time context](docs/REPOSITORY_CONTEXT_ENGINE_POINT_IN_TIME.md)
-- [RCE-022 decision provenance](docs/REPOSITORY_CONTEXT_ENGINE_DECISION_PROVENANCE.md)
-- [RCE-023 memory ownership boundary](docs/REPOSITORY_CONTEXT_ENGINE_MEMORY_OWNERSHIP.md)
-- [RCE-024 retrieval telemetry](docs/REPOSITORY_CONTEXT_ENGINE_TELEMETRY.md)
-- [RCE-025 answer feedback loop](docs/REPOSITORY_CONTEXT_ENGINE_FEEDBACK.md)
-- [RCE-026 freshness SLO](docs/REPOSITORY_CONTEXT_ENGINE_FRESHNESS.md)
-- [RCE-027 security and data governance](docs/REPOSITORY_CONTEXT_ENGINE_GOVERNANCE.md)
-- [RCE-028 second pilot acceptance gate](docs/REPOSITORY_CONTEXT_ENGINE_ROLLOUT_GATE.md)
-- [RCE-029 controlled multi-repository rollout](docs/REPOSITORY_CONTEXT_ENGINE_ROLLOUT.md)
-- [Holistic implementation pass results](docs/REPOSITORY_CONTEXT_ENGINE_IMPLEMENTATION_PASS.md)
+- App Router, Pages Router, and hybrid Next.js projects
+- Exact route inventory plus rendering, middleware, cache, SEO, and dependency behavior
+- Server Functions, cache tags/invalidation, validation schemas, authorization, and analytics events
+- Symbol-level flow, impact, verification, and change graphs
+- `next.config` rules and Next.js special-file conventions
+- Cross-repository package dependency links
+- Fleet-wide route discovery with Turkish/Unicode aliases (`/hakkımızda` → `/hakkimizda`)
+- Incremental Git sync, immutable indexed-SHA snapshots, and behavior diff
+- Local multilingual embeddings with repository-filtered vector search
+- Evidence, confidence, freshness, uncertainty, and targeted source fallback in every context pack
+- Retrieval telemetry, answer feedback, security audit, and measured rollout gates
 
-## What is implemented
-
-- Repository registry for many Next.js repositories
-- Full first index
-- Incremental Git update using `last_indexed_sha -> HEAD`
-- Full route reconciliation on **every** sync
-- App Router + Pages Router + hybrid route discovery
-- Dynamic/catch-all route discovery
-- Route-level rendering signals (SSR, SSG, ISR, dynamic SSR, RSC, CSR heuristics)
-- Route server/client boundaries, backend/data sources, cache and SEO metadata
-- Middleware/proxy matcher evaluation per route
-- AST-backed fetch/Axios/ky/GraphQL/custom-client and env dependency discovery
-- Structured route-to-dependency relationships with source symbol/line
-- Change classifier and import/layout/middleware/metadata impact tracking
-- Source-backed memories for:
-  - rendering (`cookies()`, `headers()`, `no-store`, etc.)
-  - API/fetch calls
-  - cache/revalidate
-  - authentication/session signals
-  - middleware
-  - SEO metadata
-  - analytics
-  - TanStack/React Query
-  - internal packages / Design System
-  - configuration keys
-  - TODO/FIXME technical debt
-- Important npm/internal dependency inventory
-- Run-level memory change audit and `changed_since`
-- Source-hash-aware memory/embedding reuse
-- SQLite + FTS5 exact search
-- Local embeddings with `@huggingface/transformers`
-- Repository/type-filtered `sqlite-vec` semantic vector search
-- Query-understood SQL + FTS + vector retrieval
-- `EmbeddingProvider` and `VectorStore` abstractions
-- HTTP API for CI/agent integration
-- Token-bounded read-only MCP server for Codex and Claude
-- Machine-readable answer contract for facts, derived relations, inference and uncertainty
-- Indexed-SHA snapshots, semantic behavior diff and point-in-time context
-- Human-approved decision provenance with explicit supersession
-- Evidence-gated optional AI business-memory extraction
-- Scheduled hash-aware reconciliation
-- Memory/vector coverage metrics and retrieval Recall@K evaluation
-- Automatic exclusion of custom Next.js `distDir` build output
-
-## Explicitly out of scope in this version
-
-Per the current product scope, this version does not model:
-
-- Feature Flag / A-B Testing
-- Observability
-- Incoming Consumers
-- Cross-Repository analysis
-
-The database is central; no `repository-technical-memory.md` is produced in target repositories.
+Normal indexing and retrieval make no external LLM request. The default embedding model runs locally through Transformers.js.
 
 ## Requirements
 
 - Node.js 20+
+- pnpm 10+
 - Git
-- Target repositories available on the filesystem
+- Local access to the Next.js repositories being indexed
 
-The first semantic indexing/search downloads the pinned local embedding profile (`multilingual-e5-small-v1`) through Transformers.js. The profile fixes the model revision, 384-vector dimension, q8 dtype and E5 query/passage prefixes as one reproducible contract. Set `MEMORY_EMBEDDINGS_ENABLED=0` if you want deterministic + FTS indexing only.
-
-## Setup
+## Quick start
 
 ```bash
 pnpm install
 cp .env.example .env
+cp config/repositories.example.json config/repositories.json
 ```
 
-`.env` is loaded automatically. Explicit process environment variables take precedence. Relative database/registry paths are resolved from this memory project, so MCP clients may launch it from another working directory safely.
-
-Edit `config/repositories.json`:
+Configure one or more repositories:
 
 ```json
 {
   "repositories": [
     {
-      "name": "hangikredi.deposit.fe.next",
-      "path": "/Users/you/work/squads/hangikredi.deposit.fe.next",
+      "name": "company.web.next",
+      "path": "/absolute/path/to/company.web.next",
       "mainBranch": "main",
       "managedCheckout": false
     }
@@ -131,297 +50,171 @@ Edit `config/repositories.json`:
 }
 ```
 
+Developer working trees should use `managedCheckout:false`. A service-owned clean clone may use `managedCheckout:true` with a configured remote. Dirty working trees are refused; the indexer never resets a developer checkout.
 
-### Managed checkout for a central service
-
-If the memory service owns a dedicated clone, enable:
-
-```json
-{
-  "name": "hangikredi.deposit.fe.next",
-  "path": "/srv/frontend-memory/repos/hangikredi.deposit.fe.next",
-  "mainBranch": "main",
-  "managedCheckout": true,
-  "remote": "origin"
-}
-```
-
-On sync the service performs `fetch` and resets that **dedicated clean checkout** to `origin/main` before comparing SHA values. It refuses to refresh a dirty checkout. Never enable this on a developer working copy.
-
-## First index
+Create the first index and verify it:
 
 ```bash
-npm run memory -- full hangikredi.deposit.fe.next
-```
-
-For a fleet, validate one repository first and then run the bounded batch commands:
-
-```bash
-pnpm memory full hangikredi.deposit.fe.next
-pnpm memory full-all
+pnpm memory full company.web.next
 pnpm memory embedding-status
+pnpm memory quality company.web.next
+pnpm memory security-audit company.web.next
+```
+
+The default database is created at `data/engineering-memory.sqlite`. The first vector operation downloads the pinned local `multilingual-e5-small-v1` profile.
+
+## MCP
+
+The server exposes three read-only tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `memory_repository` | Repository profiles and cross-repository package links |
+| `memory_route` | Route inventory, fleet-wide route lookup, behavior, evidence, and dependencies |
+| `memory_context` | Bounded lookup, flow, impact, debug, implementation, verification, change-review, temporal, and decision context |
+
+Build once for stdio clients:
+
+```bash
+pnpm build
+pnpm start:mcp
+```
+
+Example client files are provided for:
+
+- Codex: `config/codex-mcp.example.toml`
+- Claude: `config/claude-mcp.example.json`
+- Cursor over HTTP: `config/cursor-mcp.example.json`
+
+For HTTP MCP and the local inspection UI:
+
+```bash
+pnpm serve
+```
+
+- MCP: `http://127.0.0.1:4317/mcp`
+- UI: `http://127.0.0.1:4317/`
+- Health: `http://127.0.0.1:4317/health`
+
+Copy the policy block from `config/AGENTS.memory.example.md` into the target repository's `AGENTS.md` or equivalent agent instructions. See [Agent integrations](docs/INTEGRATIONS.md) for complete setup guidance.
+
+## Daily operation
+
+After changes reach the indexed branch:
+
+```bash
+pnpm memory sync-all
+```
+
+`sync-all` isolates failures by repository. A clean repository with no new commit returns `NOOP`; changed repositories receive route reconciliation, incremental analysis, memory invalidation, and vector updates.
+
+Useful operational commands:
+
+```bash
+pnpm memory status
+pnpm memory routes company.web.next
+pnpm memory route-dependencies company.web.next --route=/account
+pnpm memory search "where is session authorization checked?" --repo=company.web.next
+pnpm memory freshness company.web.next
+pnpm memory reconcile-all
 pnpm memory rollout-status
 ```
 
-`full-all`, `sync-all` and `reconcile-all` isolate failures per repository. Add repositories in the configured 2 → 4 → 8 → 16 rollout waves; do not jump directly from two repositories to sixteen. The complete onboarding and rollback sequence is in [`docs/NEXTJS_FLEET_RUNBOOK.md`](docs/NEXTJS_FLEET_RUNBOOK.md).
+See [Operations](docs/OPERATIONS.md) before onboarding a larger fleet or enabling managed checkouts.
 
-When an embedding profile changes, stored vectors are isolated in a fingerprinted table. Rebuild them explicitly after selecting the profile:
+## What is indexed
 
-```bash
-pnpm memory vectors                 # all repositories
-pnpm memory vectors <repository>    # one repository
-pnpm memory embedding-status
-```
+The engine stores focused facts and relations rather than generic file summaries:
 
-The measured model decision and larger profiles retained for future A/B runs are documented in [`docs/EMBEDDING_MODEL_EVALUATION.md`](docs/EMBEDDING_MODEL_EVALUATION.md).
+- repository/package/runtime profile
+- routes, layouts, middleware matchers, redirects, and not-found behavior
+- static, dynamic, ISR, RSC, and client-boundary signals
+- fetch/Axios/ky/custom-client targets and configuration-key usage
+- Server Functions and observed client/server calls
+- cache scope, lifetime, tags, paths, and invalidation
+- schema fields and observed FormData/JSON payloads
+- authentication and authorization signals
+- analytics event names, transports, and payload keys
+- `next.config` settings, rewrites, redirects, and headers
+- loading/error/not-found/metadata special files
+- state, security, performance, error, and technical-debt signals
+- symbol, component, API, config, test, and repository dependency graphs
 
-The DB is created at:
+Every active memory points to repository-relative evidence and an indexed commit. Full source files, generated output, lockfile contents, secrets, and repetitive import summaries are intentionally not copied into the vector index.
 
-```text
-data/engineering-memory.sqlite
-```
+## Retrieval model
 
-## After merge to main
+Queries are planned across three complementary stores:
 
-Once CI/local checkout is on the new main commit:
+1. Structured SQL for exact inventory, repository identity, and routes.
+2. FTS5 for precise technical identifiers.
+3. Local vectors for differently worded conceptual questions.
 
-```bash
-npm run memory -- sync hangikredi.deposit.fe.next
-```
+Task-aware graph traversal produces specialized packs for flows, impact, implementation, debugging, verification, and change review. Each pack contains an `answerContract` separating facts, derived relations, inference, uncertainty, missing evidence, and source fallback.
 
-Flow:
+The default embedding profile is pinned by model revision, dimension, dtype, and query/passage prefixes. Larger included profiles should only be selected after an evaluation demonstrates a real gain. See [Embedding model](docs/EMBEDDINGS.md).
 
-```text
-last indexed SHA
-      |
-      v
-git diff old..HEAD
-      |
-      +----> full route rescan (always)
-      |
-      +----> changed source classification / memory invalidation
-      |
-      +----> re-analyze only changed source files
-      |
-      +----> re-embed only new memories
-      |
-      v
-update last_indexed_sha
-```
+## Temporal and decision memory
 
-Deleted/renamed source files invalidate their old memories. Removed routes are preserved with `active=0` and `removed_sha` for history.
+Successful indexing stores an immutable behavior snapshot for the indexed SHA. Use `atSha` for point-in-time context and `atSha` plus `compareToSha` for behavior diff.
 
-## List routes
+Architectural rationale is not inferred from source code. Approved decisions are stored separately:
 
 ```bash
-npm run memory -- routes hangikredi.deposit.fe.next
+pnpm memory decision-add company.web.next --file=config/decision.example.json
+pnpm memory decisions company.web.next
 ```
 
-Routes are structured rows, not vector-only facts. Queries such as “show every route in repo X” can therefore be answered deterministically.
+Only approved ADR, PR, issue, or human provenance may answer “why was this chosen?” questions.
 
-## Dependencies and changes
+## Quality and evaluation
 
 ```bash
-npm run memory -- dependencies hangikredi.deposit.fe.next
-npm run memory -- route-dependencies hangikredi.deposit.fe.next --route=/account
-npm run memory -- changes hangikredi.deposit.fe.next --since=<40-char-git-sha>
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm memory evaluate
+pnpm memory context-eval
+pnpm memory security-audit
 ```
 
-`changes` reports CREATE/DEACTIVATE events after the requested successful indexed SHA; unchanged REUSE events remain internal audit data.
+`evaluate` measures retrieval Recall@K. `context-eval` executes task-level MCP plans and measures required-evidence recall and context savings against source reads. Add real engineering questions as the fleet grows; do not expand extraction or change embeddings without a measured miss.
 
-## Search
+The current implementation passes 156 tests. The latest two-repository validation produced 0.9231 mean evidence recall, 15/15 clean cases, 100% active vector/evidence/commit coverage, and an open rollout gate.
 
-Exact + semantic hybrid:
+The evaluation contract and 50-question golden catalog live in [Evaluation](docs/EVALUATION.md).
 
-```bash
-npm run memory -- search "middleware access_token cookie"
-```
+## Security and privacy
 
-Restrict to a repository:
+- Environment key names may be indexed; environment values are not.
+- The SQLite database, local repository registry, `.env`, model cache, and evaluation runs are ignored by Git.
+- Telemetry stores query shape/hash by default, not question text or retrieved fact bodies.
+- MCP tools are read-only.
+- The HTTP server binds to `127.0.0.1` by default and has no authentication.
 
-```bash
-npm run memory -- search "dynamic rendering cookies" --repo=hangikredi.deposit.fe.next --limit=10
-```
+Do not expose `MEMORY_HOST=0.0.0.0` without an authenticated reverse proxy. The same server also provides indexing endpoints.
 
-## Codex and Claude through MCP
+## Deliberate limits
 
-Build and start the local stdio MCP server:
+This is conservative static analysis, not a TypeScript compiler or runtime tracer. It does not prove that every code path executes in production. Unknown or insufficient evidence is surfaced through the answer contract.
 
-```bash
-npm run build
-npm run mcp
-```
+The current scope intentionally excludes:
 
-The server exposes three read-only tools: `memory_repository` and `memory_route` for exact inventory, plus intent-aware `memory_context` for bounded flow, impact, debug, implementation, verification, change-review, point-in-time, behavior-diff, approved-decision and lookup packs. Quality, snapshot and decision-ingest commands remain available through the CLI. See [AI_USAGE.md](docs/AI_USAGE.md) for one-time Codex/Claude registration commands and the memory-first agent policy.
+- OpenAPI/GraphQL schema ingestion
+- monorepo workspace modeling
+- instrumentation and runtime/build-manifest evidence
+- external incoming-consumer discovery
 
-## Reconciliation and quality
+## Documentation
 
-```bash
-npm run memory -- reconcile hangikredi.deposit.fe.next
-npm run memory -- reconcile-all
-npm run memory -- quality hangikredi.deposit.fe.next
-npm run memory -- evaluate
-```
+- [Architecture](docs/ARCHITECTURE.md)
+- [Agent integrations](docs/INTEGRATIONS.md)
+- [Operations](docs/OPERATIONS.md)
+- [Evaluation](docs/EVALUATION.md)
+- [Embedding model](docs/EMBEDDINGS.md)
 
-`evaluate` measures Recall@K for the retrieval smoke suite. `context-eval` runs the task-level Repository Context Engine suite instead: it executes each case's MCP tool plan, measures engine context against the source files a memory-less agent would have to open, and reports required-evidence recall per case.
+## Development status
 
-```bash
-npm run memory -- context-eval                                  # config/context-engine-eval.json
-npm run memory -- context-eval config/context-engine-eval.json  # explicit suite
-```
+The repository is production-ready for controlled Next.js fleet use. Expansion is gated in `2 → 4 → 8 → 16` waves by freshness, security, evidence coverage, duplication, latency, and evaluation quality.
 
-`context-economy` reads a `context-eval` run back and splits the cost ledger: the fixed per-session cost of the MCP tool schemas, server instructions and the repository policy block, against the per-question payload. It reports both a nominal saving (the pack replaces the source read) and an effective saving (only a clean pack replaces it). Cache and total-context figures stay `null` — only the client knows those.
-
-```bash
-npm run memory -- context-economy --policy=../your-repo/AGENTS.md
-```
-
-Answer quality is deliberately not scored by the harness; each case carries an empty `answerScore` for a human or agent pass. Results are recorded in [the RCE-002 baseline](docs/REPOSITORY_CONTEXT_ENGINE_BASELINE.md).
-
-Set `MEMORY_RECONCILE_INTERVAL_MINUTES=60` when running `npm run serve` to enable hourly reconciliation. Unchanged hashes retain their memory IDs and vectors.
-
-Optional AI enrichment is an explicit command and is never invoked by normal indexing/search:
-
-```bash
-MEMORY_AI_EXTRACTOR_URL=http://127.0.0.1:8080/extract \
-npm run memory -- ai-extract hangikredi.deposit.fe.next --file=src/app/page.tsx
-```
-
-## MCP over HTTP
-
-`serve` exposes the same three tools at `/mcp`, for clients that connect by URL instead of spawning a
-process. One factory backs both entries, so an HTTP client and a stdio client always see an identical
-surface — verified by a test.
-
-```bash
-pnpm serve   # http://127.0.0.1:4317/mcp
-```
-
-Cursor (Settings → MCP → Add), or `.cursor/mcp.json` in a project:
-
-```json
-{ "mcpServers": { "frontend-memory": { "url": "http://127.0.0.1:4317/mcp" } } }
-```
-
-Claude Code keeps working over stdio against `dist/mcp/server.js`; nothing about that changes. Use
-stdio when the client can spawn a process and HTTP when it cannot, or when several editors should
-share one running index.
-
-Serving is stateless: each request gets a fresh server over the shared database handle, so no session
-state accumulates in the long-running process.
-
-**Exposure.** The server binds to `127.0.0.1` by default and the MCP endpoint performs no
-authentication. Setting `MEMORY_HOST=0.0.0.0` publishes the read-only MCP tools *and* the existing
-`POST /sync` and `POST /full-index` endpoints to the network. Put it behind a reverse proxy with auth
-before doing that.
-
-## Browser readout
-
-`serve` also hosts a read-only UI at the same port. It pages through every indexed repository and
-draws the index from live data — no fixture, no snapshot file.
-
-```bash
-pnpm serve        # http://127.0.0.1:4317
-```
-
-- **Projection** — every stored fact placed by the principal components of its own embedding.
-  The explained variance is printed next to the plot, because the picture is lossy and says so.
-- **Vector search** — a typed question is embedded server-side and matched against the index by
-  `sqlite-vec`; the similarities shown are the ones the retrieval path uses.
-- **Neighbours** — clicking a fact pulls its nearest neighbours from the vector table, not from a
-  similarity recomputed in the browser.
-- **Traversal** — a real walk over the typed symbol graph, with the client-to-server boundary marked
-  and helper detail pruned.
-
-Endpoints behind it: `/api/ui/projects`, `/api/ui/projection/:repository`,
-`/api/ui/neighbours/:repository?id=`, `/api/ui/vector-search/:repository?q=`, `/api/ui/flow/:repository`.
-Projections are cached per indexed SHA and rebuilt when the index moves.
-
-## HTTP server
-
-```bash
-npm run serve
-```
-
-Default: `http://127.0.0.1:4317`
-
-Endpoints:
-
-```text
-GET  /health
-GET  /repositories
-GET  /quality?repo=...
-GET  /repositories/:name
-GET  /repositories/:name/routes
-GET  /repositories/:name/dependencies
-GET  /repositories/:name/route-dependencies?route=/path
-GET  /repositories/:name/changes?since=<commit>
-GET  /search?q=...&repo=...&limit=10
-POST /full-index   { "repository": "...", "commit": "<40-char SHA>" }
-POST /sync         { "repository": "...", "commit": "<40-char SHA>" }
-```
-
-### CI example
-
-After a successful merge/deploy pipeline has checked out the new `main`:
-
-```bash
-curl -X POST http://memory-service:4317/sync \
-  -H 'content-type: application/json' \
-  -d '{"repository":"hangikredi.deposit.fe.next","commit":"'"$GIT_COMMIT"'"}'
-```
-
-Only the central Memory Service writes SQLite. Do **not** mount the same SQLite DB into 16 parallel CI jobs and let them write it directly.
-
-## Data model
-
-Core tables:
-
-```text
-repositories
-index_runs
-index_run_changes
-routes
-memories
-memory_evidence
-dependencies
-route_dependencies
-memory_fts
-memory_vectors_v2 (sqlite-vec)
-```
-
-Every semantic memory has source evidence and a commit SHA. This is intentional: memory must be invalidated when its source changes.
-
-## Route behavior
-
-Examples recognized:
-
-```text
-src/app/page.tsx                     -> /
-src/app/(public)/about/page.tsx      -> /about
-src/app/products/[slug]/page.tsx     -> /products/[slug]
-src/app/api/revalidate/route.ts      -> /api/revalidate
-pages/index.tsx                       -> /
-pages/blog/[slug].tsx                -> /blog/[slug]
-pages/api/menu.ts                     -> /api/menu
-```
-
-App route groups `(group)` and parallel slot segments `@slot` are not included in the public URL. Intercepting route markers `(.)`, `(..)`, `(..)(..)` and `(...)` are normalized using Next.js route-segment semantics.
-
-## Important limitations
-
-This remains conservative static analysis, not a full TypeScript semantic compiler or runtime tracer.
-
-- Rendering detection is evidence-based but heuristic. Layouts and statically reachable local imports are modeled, but static reachability alone does not prove that every imported function executes at runtime.
-- `auth_required` is a code-signal field, not proof of production authorization.
-- `fetch()` target extraction preserves expressions; it does not invent a service name.
-- Optional AI capabilities/rules are stored only after confidence and exact source-evidence validation; normal sync never makes an external LLM request. Deterministic business rules require an explicit `BUSINESS_RULE:` source annotation.
-- `auth_required` and middleware behavior remain source-code signals, not proof of deployed authorization behavior.
-- Static import reachability and client/API call detection are conservative code facts; they do not prove that every path executes at runtime.
-
-## Recommended next steps
-
-1. Register the MCP server in Codex and Claude and add the memory-first agent guidance to the target repository.
-2. Expand `config/retrieval-evaluation.json` with real engineering questions and track Recall@K.
-3. Keep CI incremental sync enabled after main merges; use scheduled reconciliation as drift protection.
-4. Grow through the measured 2 → 4 → 8 → 16 waves; require `rollout-status` to return `advance` before each wave.
+This package remains marked `private` because it is currently distributed as source/service infrastructure rather than as a public npm package.

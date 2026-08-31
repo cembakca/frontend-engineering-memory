@@ -50,6 +50,7 @@ export async function fullIndex(config:RepositoryConfig,memoryDb:MemoryDatabase,
   let deactivated=0; let created=0;
   store.transaction(()=>{
     const repositoryId=store.upsertRepository(config,profile);
+    store.replaceRepositoryPackageDependencies(repositoryId,profile.packageDependencies,head);
     const previous=store.getRepository(config.name) as {last_indexed_sha?:string|null};
     const runId=store.beginRun(repositoryId,"FULL",previous.last_indexed_sha ?? null,head);
     const reusedIds=new Set([...partition.reused.map((item)=>item.id),...preservedAiIds]);
@@ -78,6 +79,8 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
     const sourceFiles=await listAnalyzableSourceFiles(config.path);
     const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
     store.transaction(()=>{
+      store.upsertRepository(config,profile);
+      store.replaceRepositoryPackageDependencies(repositoryId,profile.packageDependencies,head);
       store.reconcileRoutes(repositoryId,routes,head);
       store.captureRepositorySnapshot(repositoryId,config.name,head,profile as any,graph);
     });
@@ -122,6 +125,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   let deactivated=0; let created=0;
   store.transaction(()=>{
     store.upsertRepository(config,profile);
+    store.replaceRepositoryPackageDependencies(repositoryId,profile.packageDependencies,head);
     const runId=store.beginRun(repositoryId,"INCREMENTAL",fromSha,head);
     store.reconcileRoutes(repositoryId,routes,head);
     if (dependencies) {

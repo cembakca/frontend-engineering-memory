@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "RCE-009 repository semantic graph ontology. Node kinds extend entities.kind from RCE-005; edges are entity-to-entity and are stored separately from entity_occurrences (which locate one entity in a file). See docs/REPOSITORY_CONTEXT_ENGINE_GRAPH_ONTOLOGY.md.",
+  "note": "Repository semantic graph ontology. Edges are entity-to-entity and remain separate from source occurrences that locate evidence in a file.",
   "nodes": {
     "route": {
       "key": "<http path>",
@@ -15,6 +15,14 @@
     "component": {
       "key": "<file>#<ExportedName>",
       "note": "A symbol that returns JSX. Shares the symbol key namespace; a key resolves to exactly one node, classified by the most specific kind."
+    },
+    "server-function": {
+      "key": "<file>#<ExportedName>",
+      "note": "A callable symbol declared behind a file- or function-scoped use server directive. Shares the symbol key namespace."
+    },
+    "cache-key": {
+      "key": "tag:<static tag>|path:<static path>",
+      "note": "A cache tag or path named by cacheTag/revalidateTag/updateTag/revalidatePath/refresh."
     },
     "backend-endpoint": {
       "key": "<method> <resolved url template>",
@@ -50,8 +58,8 @@
       "to": "symbol|component"
     },
     "calls": {
-      "from": "symbol|component",
-      "to": "symbol",
+      "from": "symbol|component|server-function",
+      "to": "symbol|server-function",
       "confidence": "observed"
     },
     "references": {
@@ -105,6 +113,18 @@
       "to": "config",
       "confidence": "observed",
       "note": ".env declaration; environment carried on the occurrence, not the edge."
+    },
+    "tags": {
+      "from": "symbol|server-function|module",
+      "to": "cache-key",
+      "confidence": "observed",
+      "note": "cacheTag associates a cache scope with a statically named tag."
+    },
+    "invalidates": {
+      "from": "symbol|server-function|module",
+      "to": "cache-key",
+      "confidence": "observed",
+      "note": "revalidateTag, updateTag, revalidatePath or refresh invalidates/refreshes the named cache target."
     }
   },
   "derivedEdges": {
@@ -117,7 +137,9 @@
         "inherits",
         "submits-to",
         "references",
-        "delegates-to"
+        "delegates-to",
+        "tags",
+        "invalidates"
       ],
       "direction": "reverse-closure",
       "note": "Never stored. A stored reverse edge goes stale the moment any input edge changes."

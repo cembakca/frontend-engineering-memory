@@ -1,9 +1,6 @@
-# Repository Context Engine — Evaluation Contract
+# Evaluation contract
 
-**Sürüm:** 1.0  
-**Tarih:** 31 Ağustos 2026  
-**Pilot repository:** `hangikredi.aboutus.fe.next`  
-**Değerlendirilen snapshot:** `6d5978b3b82ea1734868a4b2ccf870f40e389d14`
+This contract defines the task-level acceptance suite for retrieval correctness, evidence quality, abstention, and context economy. The checked-in catalog is a reference pilot; each new repository shape should contribute real questions and evidence expectations to `config/context-engine-eval.json`.
 
 ## 1. Amaç
 
@@ -11,18 +8,13 @@ Bu evaluation yalnız “ilgili memory ilk beşte mi?” sorusunu ölçmez. Cont
 
 Mevcut üç retrieval vakası smoke test olarak kalabilir; ürün kabulü için yeterli değildir.
 
-## 2. İlk kritik baseline bulgusu
+## 2. Core invariants
 
-Pilot source'da `src/app/page.tsx`, `/` isteğini `redirect("/hakkimizda")` ile yönlendirir. Mevcut route memory ise `/` için `isr`, gateway/menu dependencies ve `revalidate=900` bağlamı döndürmüştür. Claude bu memory'den `/` route'unun içerik ve menü render ettiği sonucunu üretmiştir.
-
-Bu vaka şunları kanıtlar:
-
-- `lastIndexedSha == HEAD` yalnız freshness'i gösterir; semantic correctness'i garanti etmez.
-- Evidence dosyasının varlığı, fact'in evidence'ı doğru yorumladığı anlamına gelmez.
-- Route inheritance/impact graph ile route runtime davranışı ayrı kavramlardır.
-- Evaluation hem retrieval hem final answer seviyesinde yapılmalıdır.
-
-`RCE-E03` bundan sonra strict regression vakasıdır.
+- `lastIndexedSha == HEAD` proves snapshot freshness, not semantic correctness.
+- Evidence presence does not prove that a fact interpreted the source correctly.
+- Route runtime behavior and inherited dependency/impact relationships are distinct.
+- A cheap pack that is wrong does not replace source reading.
+- Unsupported rationale, ownership, runtime, or incoming-consumer claims must abstain.
 
 ## 3. Evaluation birimi
 

@@ -20,7 +20,7 @@ async function fixture():Promise<{repo:string;memoryDb:MemoryDatabase;cleanup:()
   const root=await mkdtemp(path.join(os.tmpdir(),"fem-audit-"));
   const repo=path.join(root,"pilot");
   await mkdir(repo,{recursive:true});
-  await writeFile(path.join(repo,".env.production"),`GATEWAY_URL=${SECRET}\nPROFILE=production\nEMPTY=\n`);
+  await writeFile(path.join(repo,".env.production"),`GATEWAY_URL=${SECRET}\nPROFILE=production\nDEV_KIND=development\nEMPTY=\n`);
 
   const registry=path.join(root,"repositories.json");
   await writeFile(registry,JSON.stringify({repositories:[{name:"pilot",path:repo,mainBranch:"main"}]}));
@@ -81,6 +81,15 @@ test("I1 does not confuse a common env word with a substring in a path",async()=
   const {memoryDb,cleanup}=await fixture();
   try {
     addMemory(memoryDb,"Configuration is loaded from src/environments/production.ts.");
+    const result=invariant(await runSecurityAudit(memoryDb,{repository:"pilot"}),"I1-no-env-values");
+    assert.equal(result.status,"pass");
+  } finally { await cleanup(); }
+});
+
+test("I1 does not confuse a low-entropy env value with a controlled database enum",async()=>{
+  const {memoryDb,cleanup}=await fixture();
+  try {
+    memoryDb.db.prepare("INSERT INTO repository_package_dependencies(repository_id,package_name,dependency_kind) VALUES(1,'example','development')").run();
     const result=invariant(await runSecurityAudit(memoryDb,{repository:"pilot"}),"I1-no-env-values");
     assert.equal(result.status,"pass");
   } finally { await cleanup(); }

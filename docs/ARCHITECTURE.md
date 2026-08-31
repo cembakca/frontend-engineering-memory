@@ -1,71 +1,98 @@
 # Architecture
 
 ```text
-                 Next.js repositories
-                        |
-              merge to main/master
-                        |
-                        v
-                 Memory Sync API
-                        |
-          optional managed Git refresh
-                        |
-              last SHA -> current SHA
-                        |
-              +---------+----------+
-              |                    |
-              v                    v
-       full route rescan       git diff
-              |                    |
-              |            change classifier
-              |            + impact graph
-              |                    |
-              |          deterministic analyzers
-              |                    |
-              +---------+----------+
-                        |
-                        v
-                    SQLite
-       +----------------+----------------+
-       |                |                |
-   structured          FTS5          sqlite-vec
- routes/dependencies                  repo partition
- route_dependencies                   + type filter
-       metadata                       |
-                                      v
-                        @huggingface/transformers
-                        local multilingual embeddings
-                                      |
-                                      v
-                         token-bounded MCP tools
-                         Codex / Claude clients
+                    Next.js repositories
+                             │
+               full / incremental / reconcile
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+        structural analysis          source-fact analysis
+   routes · config · packages     AST facts · symbols · tests
+              │                             │
+              └──────────────┬──────────────┘
+                             │
+                       atomic SQLite
+       ┌─────────────────────┼─────────────────────┐
+       │                     │                     │
+ structured inventory      FTS5              sqlite-vec
+ routes · dependencies   exact terms      local embeddings
+ snapshots · decisions                         │
+       │                     │                  │
+       └─────────────────────┴──────────────────┘
+                             │
+                  task-aware context compiler
+       SQL · search · flow · impact · verification · time
+                             │
+                    three read-only MCP tools
+                  Codex · Claude · Cursor · local agents
 ```
 
 ## Source of truth
 
-Executable repository source is the source of truth. Stored facts retain evidence (`file_path`, optional symbol/range, file hash, indexed SHA). Before analysis, the configured branch, clean working tree and expected commit are verified. When an evidence file changes, its old memory version is deactivated with `removed_sha`, removed from active FTS/vector indexes and regenerated. The complete new snapshot is committed atomically. Unchanged `source_hash` records retain the same memory/vector identity.
+Executable repository source is authoritative. Every stored fact carries repository identity, evidence path, optional symbol/range, file hash, and indexed SHA. Facts are deactivated when evidence changes or disappears. Successful indexing commits repository profile, routes, dependencies, memories, vectors, graph snapshots, and run audit atomically.
 
-## Why routes are not vector-only
+The index never treats an uncommitted working tree as a commit snapshot. Managed checkout mode is limited to service-owned clones.
 
-Routes are first-class structured data. Exact questions such as “list all active routes in repository X” must be answered with SQL, not approximate nearest-neighbor search.
+## Analysis layers
 
-## Retrieval strategy
+### Structured inventory
 
-- Structured SQL: versions, repository profile, route inventory.
-- FTS5: exact technical terms (`access_token`, package names, Next.js APIs).
-- Vector: conceptual questions where wording differs; repository partition and memory type metadata are filtered inside KNN.
-- Hybrid search: query understanding selects channels and combines their scores with channel provenance.
+SQL owns facts that must be exact: repository profiles, route inventory, route behavior, dependencies, cross-repository package links, snapshots, approved decisions, telemetry, and feedback.
 
-Agent-facing retrieval is deliberately bounded. MCP exposes exact `memory_repository`/`memory_route` inventory and one intent-aware `memory_context` compiler. The compiler returns task-specific, evidence-bearing packs with a character limit and a machine-readable `answerContract`. The agent is instructed to query memory first and open only `answerContract.sourceFallback` files when uncertainty remains. This avoids sending an entire repository—or large generated summaries—to an LLM on every task.
+Routes are never vector-only. Unicode aliases are normalized only during lookup; the real route stored from the repository is preserved.
 
-## Dependency and audit model
+### Focused memories
 
-Package, internal package, HTTP and configuration dependencies are structured rows. Route usage is represented by `route_dependencies` with source file, symbol and line. Every indexing run records CREATE/DEACTIVATE/REUSE operations in `index_run_changes`; `changed_since` returns user-visible CREATE/DEACTIVATE changes after a Git SHA.
+Deterministic analyzers emit source-backed facts for behavior not fully represented by structural rows: cache semantics, server boundaries, schemas, authorization, analytics, error conditions, configuration usage, and other implementation signals.
 
-## AI extraction boundary
+The engine does not create a generic summary for every file. Acceptance rules reject path-derived or duplicative records before they consume retrieval slots.
 
-Normal indexing and retrieval only write facts detected deterministically and never call an external LLM. Optional business interpretation is a separate, explicit `ai-extract` operation. Its output is accepted only for supported types, above the configured confidence threshold, and when an exact quote can be verified inside the declared file and line range. AI-produced memories retain producer/quality metadata and are invalidated when their evidence file changes.
+### Semantic graph
 
-## Reconciliation and quality
+The symbol graph connects modules, symbols, components, Server Functions, routes, APIs, configuration keys, cache keys, packages, tests, and verification commands. Stored edges are source observations; flow and impact closures are derived at query time so reverse relationships cannot become stale.
 
-Manual or scheduled reconciliation compares the registered repository's clean current SHA and uses the same hash-aware sync path. Quality reporting measures evidence, commit, line, symbol and vector coverage. A checked-in evaluation set exercises SQL, FTS and vector retrieval and reports Recall@K. Custom Next.js `distDir` output is excluded from analysis so generated bundles cannot dominate retrieval.
+### Retrieval
+
+Query planning selects bounded channels:
+
+- SQL for exact repository and route identities
+- FTS5 for technical names and literals
+- vector KNN for semantically related wording
+- forward graph traversal for execution flow
+- reverse graph traversal for change impact
+- verification graph for commands, tests, and explicit gaps
+- immutable snapshots for point-in-time context and behavior diff
+
+Ranking operates on canonical entities, not raw occurrences. Repository scope is applied before vector KNN.
+
+## Context contract
+
+`memory_context` emits task-specific packs rather than a generic search dump. Every pack has a character budget and an `answerContract` that identifies:
+
+- source-backed facts
+- statically derived relations
+- inferred claims
+- uncertainty reasons
+- missing evidence
+- targeted source fallback
+
+The calling agent should open only fallback files when the pack is insufficient.
+
+## Embeddings
+
+The embedding profile is an immutable contract containing model, revision, dimension, dtype, and query/passage prefixes. Its fingerprint selects the vector table, preventing vectors from incompatible profiles from mixing.
+
+The default profile is local `multilingual-e5-small-v1`. FTS/SQL remain available when embeddings are disabled.
+
+## Temporal and decision memory
+
+Each successful index stores an immutable behavior snapshot at its Git SHA. Historical queries accept only indexed SHAs and never silently fall back to HEAD.
+
+Decision rationale is separate from source-derived facts. Only approved ADR, PR, issue, or human records may supply “why” answers, and explicit supersession preserves decision history.
+
+## Security boundaries
+
+Normal full/sync/retrieval never calls an external LLM. Optional AI extraction is explicit and evidence-gated. Environment values are excluded, telemetry is allowlisted, question text storage is opt-in, and MCP tools are read-only.
+
+The HTTP service is unauthenticated and localhost-only by default. Network exposure requires an authenticated boundary.

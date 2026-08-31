@@ -133,7 +133,7 @@ function variableCost(run:any):any {
 }
 
 export async function runContextEconomy(options:{run?:string;policyFile?:string}={}):Promise<any> {
-  const runFile=path.resolve(options.run ?? path.join(projectRoot(),"eval-results/rce-002-run-1.json"));
+  const runFile=path.resolve(options.run ?? path.join(projectRoot(),"eval-results/rce-002-final.json"));
   const run=await readJson<any>(runFile);
   if (!run?.cases?.length) throw new Error(`Context evaluation run not found or empty: ${runFile}`);
 

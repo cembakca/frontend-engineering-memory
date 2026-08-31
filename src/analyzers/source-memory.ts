@@ -26,6 +26,71 @@ export async function analyzeSourceFile(repoPath: string, sourceFile: string): P
   const out: MemoryCandidate[] = [];
   const facts=extractSourceFacts(sourceFile,content);
 
+  for (const signal of facts.serverFunctions) {
+    const relatedCalls=facts.dataSources.filter((item)=>item.symbol===signal.symbol).map((item)=>`${item.kind} ${item.value}`);
+    const invalidations=facts.cacheSemantics.filter((item)=>item.symbol===signal.symbol&&item.invalidates).map((item)=>`${item.operation}(${item.target ?? ""})`);
+    const authorization=facts.authorization.filter((item)=>item.symbol===signal.symbol).map((item)=>item.mechanism);
+    const effects=[
+      relatedCalls.length ? `data calls: ${relatedCalls.join(", ")}` : null,
+      invalidations.length ? `cache invalidation: ${invalidations.join(", ")}` : null,
+      authorization.length ? `authorization: ${authorization.join(", ")}` : null,
+    ].filter(Boolean);
+    push(out,{
+      type:"server_function",subject:`${sourceFile}#${signal.symbol ?? signal.value}`,
+      content:`${signal.symbol ?? signal.value} is a Next.js Server Function declared with a ${signal.scope}-scoped 'use server' directive${effects.length ? `; ${effects.join("; ")}` : ""}.`,
+      confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:signal.endLine,
+    });
+  }
+
+  for (const signal of facts.cacheSemantics) {
+    const target=signal.target ? ` targeting ${signal.target}` : "";
+    push(out,{
+      type:signal.invalidates ? "cache_invalidation" : "cache",
+      subject:`${sourceFile}#${signal.symbol ?? "module"}:${signal.operation}:${signal.target ?? signal.line}`,
+      content:`${sourceFile}${signal.symbol ? ` ${signal.symbol}` : ""} uses ${signal.operation}${target}${signal.invalidates ? " to invalidate or refresh cached data" : " to define cache scope or lifetime"}.`,
+      confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:signal.endLine,
+    });
+  }
+
+  const schemaGroups=new Map<string,typeof facts.schemaContracts>();
+  for (const signal of facts.schemaContracts) {
+    const key=`${signal.kind}:${signal.symbol ?? "module"}:${signal.library}`;
+    schemaGroups.set(key,[...(schemaGroups.get(key) ?? []),signal]);
+  }
+  for (const group of schemaGroups.values()) {
+    const signal=group[0]!;
+    const fields=[...new Set(group.flatMap((item)=>item.fields))].slice(0,50);
+    push(out,{
+      type:"schema_contract",subject:`${sourceFile}#${signal.symbol ?? signal.kind}:${signal.kind}`,
+      content:`${sourceFile}${signal.symbol ? ` ${signal.symbol}` : ""} defines a ${signal.kind} through ${signal.library} with fields: ${fields.join(", ")}.`,
+      confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:Math.max(...group.map((item)=>item.endLine)),
+    });
+  }
+
+  const authorizationGroups=new Map<string,typeof facts.authorization>();
+  for (const signal of facts.authorization) {
+    const key=signal.symbol ?? `line-${signal.line}`;
+    authorizationGroups.set(key,[...(authorizationGroups.get(key) ?? []),signal]);
+  }
+  for (const group of authorizationGroups.values()) {
+    const signal=group[0]!;
+    const requirements=[...new Set(group.map((item)=>item.requirement).filter((item):item is string=>Boolean(item)))];
+    const outcomes=[...new Set(group.map((item)=>item.outcome).filter((item):item is string=>Boolean(item)))];
+    push(out,{
+      type:"authorization",subject:`${sourceFile}#${signal.symbol ?? signal.line}`,
+      content:`${sourceFile}${signal.symbol ? ` ${signal.symbol}` : ""} enforces authorization using ${[...new Set(group.map((item)=>item.mechanism))].join(", ")}${requirements.length ? ` for ${requirements.join(", ")}` : ""}${outcomes.length ? ` with outcomes ${outcomes.join(", ")}` : ""}.`,
+      confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:Math.max(...group.map((item)=>item.endLine)),
+    });
+  }
+
+  for (const signal of facts.analyticsEvents) {
+    push(out,{
+      type:"analytics_event",subject:`${signal.event}@${sourceFile}:${signal.line}`,
+      content:`Analytics event ${signal.event} is emitted by ${signal.symbol ?? sourceFile} through ${signal.transport}${signal.payloadKeys.length ? ` with payload keys ${signal.payloadKeys.join(", ")}` : ""}.`,
+      confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:signal.endLine,
+    });
+  }
+
   for (const signal of facts.envKeys) {
     const key=signal.value;
     push(out, {
@@ -44,7 +109,7 @@ export async function analyzeSourceFile(repoPath: string, sourceFile: string): P
   // produced. The structured row is the canonical record; a second memory copy only
   // spends a retrieval slot in the returned window.
 
-  if (/\b(?:cookies|headers)\s*\(/.test(content)) {
+  if (!/^next\.config\.(?:ts|js|mjs|cjs)$/.test(sourceFile)&&/\b(?:cookies|headers)\s*\(/.test(content)) {
     const functions = ["cookies", "headers"].filter((fn) => new RegExp(`\\b${fn}\\s*\\(`).test(content));
     push(out, {
       type: "rendering",
@@ -126,7 +191,7 @@ export async function analyzeSourceFile(repoPath: string, sourceFile: string): P
     });
   }
 
-  if (/dataLayer|gtag\s*\(|GoogleTagManager|GoogleAnalytics/i.test(content)) {
+  if (!facts.analyticsEvents.length&&/dataLayer|gtag\s*\(|GoogleTagManager|GoogleAnalytics/i.test(content)) {
     push(out, {
       type: "analytics",
       subject: sourceFile,
@@ -206,6 +271,12 @@ export async function analyzeSourceFile(repoPath: string, sourceFile: string): P
   }
   if (/(^|\/)(?:global-)?error\.(?:ts|tsx|js|jsx)$|(^|\/)not-found\.(?:ts|tsx|js|jsx)$/.test(sourceFile)) {
     push(out,{type:"error_handling",subject:sourceFile,content:`${sourceFile} implements a Next.js error or not-found boundary.`,confidence:"verified",sourceFile,startLine:1});
+  }
+  const specialMatch=sourceFile.match(/(?:^|\/)(loading|template|default|error|global-error|not-found|global-not-found|forbidden|unauthorized|robots|sitemap|manifest|icon|opengraph-image|twitter-image)\.(?:ts|tsx|js|jsx)$/);
+  if (specialMatch) {
+    const convention=specialMatch[1]!;
+    const scope=sourceFile.replace(/\/(?:loading|template|default|error|global-error|not-found|global-not-found|forbidden|unauthorized|robots|sitemap|manifest|icon|opengraph-image|twitter-image)\.(?:ts|tsx|js|jsx)$/,"")||"app";
+    push(out,{type:"special_file",subject:sourceFile,content:`${sourceFile} implements the Next.js ${convention} file convention for the ${scope} scope.`,confidence:"verified",sourceFile,startLine:1,endLine:content.split("\n").length});
   }
   for (const signal of facts.securitySignals) {
     push(out,{type:"security",subject:`${sourceFile}:${signal.line}`,content:`${sourceFile} contains verified security-related code: ${signal.value}.`,confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:signal.endLine});

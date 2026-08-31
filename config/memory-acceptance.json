@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "RCE-006 acceptance rules. Enforced at extraction time; the retrieval guard is a fallback for repositories not yet reindexed. See docs/REPOSITORY_CONTEXT_ENGINE_ACCEPTANCE.md.",
+  "note": "Memory acceptance rules. Enforced at extraction time; the retrieval guard is a fallback for repositories not yet reindexed.",
   "rules": {
     "R1-path-derivable": {
       "reject": true,
@@ -46,6 +46,14 @@
     "seo": { "verdict": "keep", "pilotRows": 7, "detail": "static vs generateMetadata requires reading the file." },
     "api_dependency": { "verdict": "keep", "pilotRows": 6, "detail": "Fetch targets; constant resolution is RCE-010's job." },
     "cache": { "verdict": "keep", "pilotRows": 4 },
+    "cache_invalidation": { "verdict": "keep", "detail": "Exact tag/path invalidation calls and their owning symbol are behavior, not path-derived metadata." },
+    "server_function": { "verdict": "keep", "detail": "File- or function-scoped use server directives identify callable server boundaries and their observed effects." },
+    "authorization": { "verdict": "keep", "detail": "Specific authorization calls, role/permission checks, and forbidden/unauthorized outcomes are line-located enforcement facts." },
+    "schema_contract": { "verdict": "keep", "detail": "Validation schemas and observed form/JSON payload keys expose domain contracts with focused evidence." },
+    "analytics_event": { "verdict": "keep", "detail": "Static event names, transports, and payload keys are more precise than generic analytics-presence memories." },
+    "next_config": { "verdict": "keep", "detail": "Concrete settings and rewrite/redirect/header rules replace the rejected path-only next.config statement." },
+    "special_file": { "verdict": "keep", "detail": "The exact Next.js convention and route scope affect runtime behavior; instrumentation files are intentionally excluded from this phase." },
+    "repository_dependency": { "verdict": "structured", "detail": "Cross-repository package links live in the relational graph and repository MCP response instead of duplicating package.json rows as vectors." },
     "security": { "verdict": "keep", "pilotRows": 2 },
     "error_handling": { "verdict": "keep", "detail": "HTTP failure responses and their enclosing guard/catch condition are source-verifiable behavior." },
     "module_contract": { "verdict": "keep", "detail": "Nullable returns and registry/config entries are focused, line-located contracts not represented by the dependency graph." },

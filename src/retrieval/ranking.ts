@@ -23,12 +23,12 @@ function taskFit(result:SearchResult,intent:TaskIntent):number {
   if (result.exactAnchorMatch) return 1;
   if (channels.includes("graph")) return clamp((["explain-flow","impact","debug","change-review"].includes(intent) ? 1 : .75)+(result.queryTypeBoost ?? 0));
   const preferred:Partial<Record<TaskIntent,MemoryType[]>>={
-    lookup:["repository_profile","rendering","configuration","dependency","api_dependency","build","seo"],
-    "explain-flow":["api_dependency","data_fetching","module_contract","cache","rendering","configuration"],
-    impact:["module_contract","configuration","dependency","api_dependency","rendering","shared_package","design_system"],
-    debug:["error_handling","module_contract","api_dependency","configuration","security","cache","rendering"],
-    "implementation-plan":["module_contract","business_rule","api_dependency","rendering","cache","build","design_system"],
-    "change-review":["technical_debt","rendering","api_dependency","configuration","build"],
+    lookup:["repository_profile","rendering","configuration","next_config","special_file","dependency","api_dependency","build","seo"],
+    "explain-flow":["server_function","api_dependency","data_fetching","schema_contract","module_contract","cache","cache_invalidation","authorization","analytics_event","rendering","configuration"],
+    impact:["server_function","module_contract","schema_contract","next_config","configuration","dependency","api_dependency","rendering","shared_package","design_system"],
+    debug:["error_handling","server_function","module_contract","schema_contract","api_dependency","configuration","authorization","security","cache","cache_invalidation","rendering"],
+    "implementation-plan":["server_function","module_contract","schema_contract","business_rule","api_dependency","authorization","rendering","cache","cache_invalidation","next_config","build","design_system"],
+    "change-review":["technical_debt","server_function","schema_contract","analytics_event","rendering","api_dependency","next_config","configuration","build"],
     verify:["build","error_handling","technical_debt"],
     unknown:[],
   };

@@ -4,6 +4,10 @@ import type { DependencyCandidate, MemoryCandidate, PreparedMemoryCandidate, Rep
 import type { MemoryDatabase } from "./database.js";
 import type { GraphEdge } from "../analyzers/symbol-graph.js";
 import { validateDecision, type DecisionInput } from "./decisions.js";
+import { routesEquivalent } from "../retrieval/route-identity.js";
+
+/** Bump when deterministic extraction semantics change for unchanged source files. */
+const DETERMINISTIC_ANALYZER_REVISION="rce-030-v2";
 
 export class MemoryStore {
   constructor(private readonly memoryDb: MemoryDatabase) {}
@@ -16,21 +20,21 @@ export class MemoryStore {
 
   upsertRepository(config: RepositoryConfig, profile: RepositoryProfile): number {
     this.db.prepare(`
-      INSERT INTO repositories(name,path,main_branch,framework,next_version,react_version,node_version,router_type,package_manager,build_command,start_command,dev_command,output_mode,updated_at)
-      VALUES(@name,@path,@mainBranch,@framework,@nextVersion,@reactVersion,@nodeVersion,@routerType,@packageManager,@buildCommand,@startCommand,@devCommand,@outputMode,CURRENT_TIMESTAMP)
+      INSERT INTO repositories(name,path,main_branch,framework,next_version,react_version,node_version,router_type,package_manager,build_command,start_command,dev_command,output_mode,package_name,updated_at)
+      VALUES(@name,@path,@mainBranch,@framework,@nextVersion,@reactVersion,@nodeVersion,@routerType,@packageManager,@buildCommand,@startCommand,@devCommand,@outputMode,@packageName,CURRENT_TIMESTAMP)
       ON CONFLICT(name) DO UPDATE SET
         path=excluded.path, main_branch=excluded.main_branch, framework=excluded.framework,
         next_version=excluded.next_version, react_version=excluded.react_version,
         node_version=excluded.node_version, router_type=excluded.router_type,
         package_manager=excluded.package_manager, build_command=excluded.build_command,
         start_command=excluded.start_command, dev_command=excluded.dev_command,
-        output_mode=excluded.output_mode, updated_at=CURRENT_TIMESTAMP
+        output_mode=excluded.output_mode, package_name=excluded.package_name, updated_at=CURRENT_TIMESTAMP
     `).run({
       name: config.name, path: config.path, mainBranch: config.mainBranch ?? "main",
       framework: profile.framework, nextVersion: profile.nextVersion, reactVersion: profile.reactVersion,
       nodeVersion: profile.nodeVersion, routerType: profile.routerType, packageManager: profile.packageManager,
       buildCommand: profile.buildCommand, startCommand: profile.startCommand, devCommand: profile.devCommand,
-      outputMode: profile.outputMode,
+      outputMode: profile.outputMode, packageName:profile.packageName,
     });
     const row = this.db.prepare("SELECT id FROM repositories WHERE name=?").get(config.name) as { id: number };
     return row.id;
@@ -171,15 +175,17 @@ export class MemoryStore {
     tx();
   }
 
-  listRoutes(repositoryName: string): any[] {
-    return this.db.prepare(`SELECT r.* FROM routes r JOIN repositories repo ON repo.id=r.repository_id WHERE repo.name=? AND r.active=1 ORDER BY r.route,r.source_file`).all(repositoryName);
+  listRoutes(repositoryName?:string):any[] {
+    return this.db.prepare(`SELECT r.*,repo.name repository FROM routes r JOIN repositories repo ON repo.id=r.repository_id WHERE r.active=1 ${repositoryName ? "AND repo.name=?" : ""} ORDER BY repo.name,r.route,r.source_file`)
+      .all(...(repositoryName ? [repositoryName] : []));
   }
 
   getRoute(repositoryName:string,route:string):any | undefined {
-    return this.db.prepare(`
-      SELECT r.* FROM routes r JOIN repositories repo ON repo.id=r.repository_id
-      WHERE repo.name=? AND r.route=? AND r.active=1 ORDER BY r.id LIMIT 1
-    `).get(repositoryName,route);
+    return this.findRoutes(route,repositoryName)[0];
+  }
+
+  findRoutes(route:string,repositoryName?:string):any[] {
+    return this.listRoutes(repositoryName).filter((row:any)=>routesEquivalent(String(row.route),route));
   }
 
   memoryEvidence(memoryIds:number[]):Map<number,any[]> {
@@ -214,7 +220,7 @@ export class MemoryStore {
     const routeDependencies=this.db.prepare(`SELECT COUNT(*) count FROM route_dependencies rd JOIN routes r ON r.id=rd.route_id JOIN repositories repo ON repo.id=r.repository_id WHERE r.active=1 ${filter}`).get(params) as {count:number};
     // Duplication is measured as distinct (type,subject) pairs against stored
     // rows: one real thing recorded many times inflates retrieval and consumes
-    // the returned window. See docs/REPOSITORY_CONTEXT_ENGINE_NORMALIZATION.md.
+    // the returned window. The structured entity is the canonical record.
     const duplication=this.db.prepare(`
       SELECT COUNT(*) rows, COUNT(DISTINCT m.memory_type || char(31) || m.subject) subjects
       FROM memories m JOIN repositories repo ON repo.id=m.repository_id
@@ -284,6 +290,28 @@ export class MemoryStore {
       WHERE repo.name=? AND d.active=1
       ORDER BY d.dependency_type,d.name,d.source_file
     `).all(repositoryName);
+  }
+
+  replaceRepositoryPackageDependencies(repositoryId:number,dependencies:RepositoryProfile["packageDependencies"],sha:string):void {
+    const tx=this.db.transaction(()=>{
+      this.db.prepare("DELETE FROM repository_package_dependencies WHERE repository_id=?").run(repositoryId);
+      const insert=this.db.prepare(`INSERT INTO repository_package_dependencies(repository_id,package_name,dependency_kind,source_file,last_seen_sha) VALUES(?,?,?,'package.json',?)`);
+      for (const dependency of dependencies) insert.run(repositoryId,dependency.name,dependency.kind,sha);
+    });
+    tx();
+  }
+
+  listRepositoryLinks(repositoryName?:string):any[] {
+    const rows=this.db.prepare(`
+      SELECT consumer.name consumer_repository,provider.name provider_repository,
+             dependency.package_name,dependency.dependency_kind,dependency.source_file,dependency.last_seen_sha
+      FROM repository_package_dependencies dependency
+      JOIN repositories consumer ON consumer.id=dependency.repository_id
+      JOIN repositories provider ON provider.package_name=dependency.package_name AND provider.id!=consumer.id
+      ${repositoryName ? "WHERE consumer.name=? OR provider.name=?" : ""}
+      ORDER BY consumer.name,provider.name,dependency.package_name
+    `).all(...(repositoryName ? [repositoryName,repositoryName] : [])) as any[];
+    return rows.map((row)=>({...row,direction:repositoryName ? (row.consumer_repository===repositoryName ? "outgoing" : "incoming") : null}));
   }
 
   listRouteDependencies(repositoryName:string,route?:string):any[] {
@@ -435,7 +463,7 @@ export class MemoryStore {
       rows.push({
         candidate,
         evidence,
-        sourceHash: sha256(`${candidate.producer ?? "deterministic"}|${candidate.type}|${candidate.subject}|${candidate.content}|${evidence.map((item) => `${item.sourceFile}:${item.fileHash ?? ""}`).join("|")}`),
+        sourceHash: sha256(`${candidate.producer ?? "deterministic"}|${candidate.producer==="ai" ? "ai" : DETERMINISTIC_ANALYZER_REVISION}|${candidate.type}|${candidate.subject}|${candidate.content}|${candidate.confidence}|${candidate.sourceSymbol ?? ""}|${candidate.startLine ?? ""}|${candidate.endLine ?? ""}|${evidence.map((item) => `${item.sourceFile}:${item.fileHash ?? ""}`).join("|")}`),
       });
     }
     return rows;

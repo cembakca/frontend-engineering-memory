@@ -3,10 +3,10 @@ import ts from "typescript";
 import { readTextIfSmall } from "../utils/fs.js";
 import { LocalModuleGraph } from "./module-graph.js";
 
-export type GraphNodeKind="module"|"symbol"|"component"|"route"|"config"|"backend-endpoint"|"package"|"test"|"verification-command";
+export type GraphNodeKind="module"|"symbol"|"component"|"server-function"|"cache-key"|"route"|"config"|"backend-endpoint"|"package"|"test"|"verification-command";
 export type GraphEdgeType=
   |"imports"|"exports"|"calls"|"renders"|"reads"|"fetches"|"submits-to"|"references"
-  |"inherits"|"delegates-to"|"validated-by"|"declares";
+  |"inherits"|"delegates-to"|"validated-by"|"declares"|"tags"|"invalidates";
 
 export interface GraphEdge {
   type:GraphEdgeType;
@@ -41,6 +41,7 @@ interface ModuleFacts {
   callables:Set<string>;
   /** Every module-level declared name, exported or not. */
   moduleSymbols:Set<string>;
+  serverFunctions:Set<string>;
   /** `export { name } from "./x"` re-exports, keyed by the exported name. */
   reExports:Map<string,{specifier:string;imported:string}>;
 }
@@ -114,7 +115,11 @@ function returnsJsx(node:ts.Node):boolean {
 function collectModule(file:string,content:string):ModuleFacts {
   const source=ts.createSourceFile(file,content,ts.ScriptTarget.Latest,true,
     /\.tsx?$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
-  const facts:ModuleFacts={file,source,imports:new Map(),constants:new Map(),exported:new Set(),components:new Set(),callables:new Set(),moduleSymbols:new Set(),reExports:new Map()};
+  const facts:ModuleFacts={file,source,imports:new Map(),constants:new Map(),exported:new Set(),components:new Set(),callables:new Set(),moduleSymbols:new Set(),serverFunctions:new Set(),reExports:new Map()};
+  const moduleUseServer=source.statements.some((statement)=>ts.isExpressionStatement(statement)&&ts.isStringLiteral(statement.expression)&&statement.expression.text==="use server");
+  const locallyExported=new Set(source.statements.flatMap((statement)=>
+    ts.isExportDeclaration(statement)&&!statement.moduleSpecifier&&statement.exportClause&&ts.isNamedExports(statement.exportClause)
+      ? statement.exportClause.elements.map((element)=>(element.propertyName ?? element.name).text) : []));
 
   for (const statement of source.statements) {
     if (ts.isImportDeclaration(statement)&&ts.isStringLiteral(statement.moduleSpecifier)) {
@@ -141,10 +146,12 @@ function collectModule(file:string,content:string):ModuleFacts {
     if (ts.isFunctionDeclaration(statement)||ts.isClassDeclaration(statement)) {
       const name=statement.name?.getText();
       if (!name) continue;
-      if (hasExportModifier(statement)) facts.exported.add(name);
+      if (hasExportModifier(statement)||locallyExported.has(name)) facts.exported.add(name);
       if (returnsJsx(statement)) facts.components.add(name);
       facts.callables.add(name);
       facts.moduleSymbols.add(name);
+      const first=ts.isFunctionDeclaration(statement) ? statement.body?.statements[0] : undefined;
+      if ((moduleUseServer&&(hasExportModifier(statement)||locallyExported.has(name)))||(first&&ts.isExpressionStatement(first)&&ts.isStringLiteral(first.expression)&&first.expression.text==="use server")) facts.serverFunctions.add(name);
       continue;
     }
     if (ts.isVariableStatement(statement)) {
@@ -153,9 +160,14 @@ function collectModule(file:string,content:string):ModuleFacts {
         if (!ts.isIdentifier(declaration.name)) continue;
         const name=declaration.name.getText();
         facts.moduleSymbols.add(name);
-        if (exported) facts.exported.add(name);
+        if (exported||locallyExported.has(name)) facts.exported.add(name);
         if (declaration.initializer&&returnsJsx(declaration.initializer)) facts.components.add(name);
         if (isCallableInitializer(declaration.initializer)) facts.callables.add(name);
+        if (declaration.initializer&&(ts.isArrowFunction(declaration.initializer)||ts.isFunctionExpression(declaration.initializer))) {
+          const body=declaration.initializer.body;
+          const first=ts.isBlock(body) ? body.statements[0] : undefined;
+          if ((moduleUseServer&&(exported||locallyExported.has(name)))||(first&&ts.isExpressionStatement(first)&&ts.isStringLiteral(first.expression)&&first.expression.text==="use server")) facts.serverFunctions.add(name);
+        }
         const literal=staticStringOf(declaration.initializer);
         if (literal!=null) facts.constants.set(name,literal);
       }
@@ -261,14 +273,14 @@ export class SymbolGraph {
     for (const [file,facts] of this.modules) {
       for (const name of facts.exported) {
         push({type:"exports",from:file,fromKind:"module",to:symbolKey(file,name),
-          toKind:facts.components.has(name) ? "component" : "symbol",
+          toKind:facts.serverFunctions.has(name) ? "server-function" : facts.components.has(name) ? "component" : "symbol",
           filePath:file,symbol:name,startLine:1,confidence:"observed"});
       }
 
       const visit=(node:ts.Node):void=>{
         const holder=enclosingSymbol(node);
         const fromKey=holder ? symbolKey(file,holder) : file;
-        const fromKind:GraphNodeKind=holder ? (facts.components.has(holder) ? "component" : "symbol") : "module";
+        const fromKind:GraphNodeKind=holder ? (facts.serverFunctions.has(holder) ? "server-function" : facts.components.has(holder) ? "component" : "symbol") : "module";
         const line=lineOf(facts.source,node);
 
         if (ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node)) {
@@ -332,10 +344,10 @@ export class SymbolGraph {
             const name=callee.getText();
             const target=this.resolveBinding(file,name);
             if (target) {
-              push({type:"calls",from:fromKey,fromKind,to:symbolKey(target.file,target.name),toKind:"symbol",
+              push({type:"calls",from:fromKey,fromKind,to:symbolKey(target.file,target.name),toKind:this.modules.get(target.file)?.serverFunctions.has(target.name) ? "server-function" : "symbol",
                 filePath:file,symbol:holder,startLine:line,confidence:"observed"});
             } else if (facts.callables.has(name)) {
-              push({type:"calls",from:fromKey,fromKind,to:symbolKey(file,name),toKind:"symbol",
+              push({type:"calls",from:fromKey,fromKind,to:symbolKey(file,name),toKind:facts.serverFunctions.has(name) ? "server-function" : "symbol",
                 filePath:file,symbol:holder,startLine:line,confidence:"observed"});
             }
           } else if (ts.isPropertyAccessExpression(callee)&&ts.isIdentifier(callee.expression)) {
@@ -345,6 +357,18 @@ export class SymbolGraph {
               push({type:"calls",from:fromKey,fromKind,to:symbolKey(target.file,target.name),toKind:"symbol",
                 filePath:file,symbol:holder,startLine:line,confidence:"observed"});
             }
+          }
+          const cacheBinding=ts.isIdentifier(callee) ? facts.imports.get(callee.text) : undefined;
+          const namespaceBinding=ts.isPropertyAccessExpression(callee)&&ts.isIdentifier(callee.expression) ? facts.imports.get(callee.expression.text) : undefined;
+          const cacheCallee=cacheBinding?.file==="next/cache" ? cacheBinding.imported
+            : namespaceBinding?.file==="next/cache"&&namespaceBinding.imported==="*"&&ts.isPropertyAccessExpression(callee) ? callee.name.text : null;
+          if (cacheCallee&&["cacheTag","revalidateTag","updateTag","revalidatePath","refresh"].includes(cacheCallee)) {
+            const target=node.arguments[0] ? this.resolveTarget(file,node.arguments[0]!) : "current-route";
+            if (target) push({
+              type:["revalidateTag","updateTag","revalidatePath","refresh"].includes(cacheCallee) ? "invalidates" : "tags",
+              from:fromKey,fromKind,to:`${cacheCallee.includes("Path")||cacheCallee==="refresh" ? "path" : "tag"}:${target}`,toKind:"cache-key",
+              filePath:file,symbol:holder,startLine:line,confidence:"observed",
+            });
           }
         }
         ts.forEachChild(node,visit);

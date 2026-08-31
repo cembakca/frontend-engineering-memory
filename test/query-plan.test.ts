@@ -11,6 +11,11 @@ test("uses exact SQL first for structured lookup and keeps semantic channels con
   assert.deepEqual(planQuery("Bütün aktif route'ları listele").rounds[0].steps.map((item)=>item.channel),["exact-sql"]);
 });
 
+test("normalizes Turkish and percent-encoded route aliases for exact lookup",()=>{
+  assert.equal(planQuery("/hakkımızda sayfasını güncelleyeceğim").anchors.route,"/hakkimizda");
+  assert.equal(planQuery("/%C4%B1letisim route'u").anchors.route,"/iletisim");
+});
+
 test("routes flow and impact questions to their graph traversals",()=>{
   const flow=planQuery("Form UI'dan backend'e hangi sırayla gider?");
   assert.deepEqual(flow.rounds[0].steps.map((item)=>item.channel),["exact-sql","graph-flow"]);
@@ -32,6 +37,9 @@ test("automatically inferred memory types boost while explicit constraints filte
   const explicit=planQuery("davranış nedir?",{memoryTypes:["cache"]});
   assert.equal(explicit.memoryTypeMode,"filter");
   assert.deepEqual(explicit.memoryTypes,["cache"]);
+  const analytics=planQuery("Analytics eventleri hangi payload alanlarıyla gönderiliyor?");
+  assert.ok(analytics.memoryTypes.includes("analytics_event"));
+  assert.equal(analytics.memoryTypes.includes("schema_contract"),false,"analytics payload wording must not boost validation schemas");
 });
 
 test("opens round two only for measurable insufficiency",()=>{

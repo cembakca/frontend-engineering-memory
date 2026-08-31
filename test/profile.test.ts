@@ -9,7 +9,8 @@ test("detects Next.js versions, package manager and hybrid router",async()=>{
   const root=await mkdtemp(path.join(os.tmpdir(),"fem-profile-"));
   try {
     await writeFile(path.join(root,"package.json"),JSON.stringify({
-      dependencies:{next:"15.5.0",react:"19.1.0"},
+      name:"@company/site",
+      dependencies:{next:"15.5.0",react:"19.1.0","@company/design-system":"workspace:*"},
       engines:{node:">=20"},
       scripts:{dev:"next dev",build:"next build",start:"next start"},
       packageManager:"pnpm@10.0.0"
@@ -22,5 +23,7 @@ test("detects Next.js versions, package manager and hybrid router",async()=>{
     assert.equal(profile.nextVersion,"15.5.0");
     assert.equal(profile.packageManager,"pnpm");
     assert.equal(profile.outputMode,"standalone");
+    assert.equal(profile.packageName,"@company/site");
+    assert.ok(profile.packageDependencies.some((item)=>item.name==="@company/design-system"&&item.kind==="runtime"));
   } finally { await rm(root,{recursive:true,force:true}); }
 });

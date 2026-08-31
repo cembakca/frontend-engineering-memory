@@ -4,8 +4,11 @@ import { readJson, readTextIfSmall } from "../utils/fs.js";
 import type { RepositoryProfile, RouterType } from "../types.js";
 
 interface PackageJson {
+  name?:string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  optionalDependencies?:Record<string,string>;
+  peerDependencies?:Record<string,string>;
   engines?: { node?: string };
   scripts?: Record<string, string>;
   packageManager?: string;
@@ -70,6 +73,13 @@ export async function analyzeRepositoryProfile(name: string, repoPath: string): 
     startCommand: pkg.scripts?.start ? `${packageManager ?? "npm"} run start` : null,
     devCommand: pkg.scripts?.dev ? `${packageManager ?? "npm"} run dev` : null,
     outputMode,
+    packageName:pkg.name ?? null,
+    packageDependencies:[
+      ...Object.keys(pkg.dependencies ?? {}).map((name)=>({name,kind:"runtime" as const})),
+      ...Object.keys(pkg.devDependencies ?? {}).map((name)=>({name,kind:"development" as const})),
+      ...Object.keys(pkg.optionalDependencies ?? {}).map((name)=>({name,kind:"optional" as const})),
+      ...Object.keys(pkg.peerDependencies ?? {}).map((name)=>({name,kind:"peer" as const})),
+    ].filter((item,index,all)=>all.findIndex((candidate)=>candidate.name===item.name)===index).sort((a,b)=>a.name.localeCompare(b.name)),
     evidenceFiles: ["package.json",...(nextConfigFile ? [nextConfigFile] : [])],
   };
 }

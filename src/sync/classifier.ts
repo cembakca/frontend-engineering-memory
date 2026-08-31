@@ -10,6 +10,7 @@ export function classifyFile(filePath:string): ClassifiedFile {
   else if (/(^|\/)(?:middleware|proxy)\.(?:ts|js)$/.test(file)) analyzers=kinds("middleware","authentication","route","security");
   else if (/(^|\/)(?:Dockerfile|docker-compose[^/]*|tsconfig\.json)$/.test(file)) analyzers=kinds("build","configuration");
   else if (/(^|\/)\.env(?:\.[^/]+)?$/.test(file)) analyzers=kinds("configuration","security");
+  else if (/^(?:src\/)?app\/(?:.*\/)?(?:robots\.txt|sitemap\.xml|manifest\.webmanifest)$/.test(file)) analyzers=kinds("seo","configuration");
   else if (/\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(file)) {
     analyzers=kinds("rendering","api","cache","authentication","state","seo","analytics","configuration","security","performance","technical-debt");
     if (/(^|\/)(?:app|pages)\//.test(file)) analyzers.push("route");

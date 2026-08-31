@@ -21,6 +21,34 @@ export interface HttpErrorSignal extends LocatedSignal {
   condition:string|null;
 }
 
+export interface ServerFunctionSignal extends LocatedSignal {
+  scope:"file"|"inline";
+}
+
+export interface CacheSemanticSignal extends LocatedSignal {
+  operation:"use-cache"|"cacheLife"|"cacheTag"|"unstable_cache"|"revalidateTag"|"updateTag"|"revalidatePath"|"refresh";
+  target:string|null;
+  invalidates:boolean;
+}
+
+export interface SchemaContractSignal extends LocatedSignal {
+  kind:"validation-schema"|"form-payload"|"json-payload";
+  library:string;
+  fields:string[];
+}
+
+export interface AuthorizationSignal extends LocatedSignal {
+  mechanism:string;
+  requirement:string|null;
+  outcome:string|null;
+}
+
+export interface AnalyticsEventSignal extends LocatedSignal {
+  event:string;
+  transport:string;
+  payloadKeys:string[];
+}
+
 /** `redirect()` / `notFound()` are control flow, not rendering: a page that redirects never renders. */
 export interface ControlFlowSignal {
   kind:"redirect"|"permanent-redirect"|"not-found";
@@ -46,6 +74,11 @@ export interface SourceFacts {
   businessRules: LocatedSignal[];
   moduleContracts: ModuleContractSignal[];
   httpErrors: HttpErrorSignal[];
+  serverFunctions:ServerFunctionSignal[];
+  cacheSemantics:CacheSemanticSignal[];
+  schemaContracts:SchemaContractSignal[];
+  authorization:AuthorizationSignal[];
+  analyticsEvents:AnalyticsEventSignal[];
 }
 
 function nodeName(node: ts.Node): string | null {
@@ -99,6 +132,70 @@ function objectProperty(expression:ts.Expression|undefined,name:string):ts.Expre
   return undefined;
 }
 
+function propertyName(node:ts.PropertyName):string|null {
+  if (ts.isIdentifier(node)||ts.isStringLiteralLike(node)||ts.isNumericLiteral(node)) return node.text;
+  return null;
+}
+
+function objectKeys(expression:ts.Expression|undefined):string[] {
+  if (!expression||!ts.isObjectLiteralExpression(expression)) return [];
+  return expression.properties.flatMap((property)=>{
+    if (ts.isSpreadAssignment(property)) return [];
+    if (ts.isPropertyAssignment(property)||ts.isShorthandPropertyAssignment(property)||ts.isMethodDeclaration(property)) {
+      const name=propertyName(property.name);
+      return name ? [name] : [];
+    }
+    return [];
+  });
+}
+
+function staticText(expression:ts.Expression|undefined):string|null {
+  if (!expression) return null;
+  if (ts.isStringLiteralLike(expression)||ts.isNumericLiteral(expression)) return expression.text;
+  if (expression.kind===ts.SyntaxKind.TrueKeyword) return "true";
+  if (expression.kind===ts.SyntaxKind.FalseKeyword) return "false";
+  return null;
+}
+
+function isAuthorizationReference(expression:ts.Expression,counterpart:ts.Expression):boolean {
+  const semanticName=/^(?:userRole|permission|permissions|isAdmin|isAuthorized)$/i;
+  if (ts.isParenthesizedExpression(expression)) return isAuthorizationReference(expression.expression,counterpart);
+  if (ts.isIdentifier(expression)) return semanticName.test(expression.text)||(expression.text.toLowerCase()==="role"&&staticText(counterpart)!=null);
+  if (ts.isPropertyAccessExpression(expression)) return semanticName.test(expression.name.text)||expression.name.text.toLowerCase()==="role";
+  if (ts.isElementAccessExpression(expression)) {
+    const name=staticText(expression.argumentExpression);
+    return name!=null&&(semanticName.test(name)||name.toLowerCase()==="role");
+  }
+  if (ts.isPrefixUnaryExpression(expression)) return isAuthorizationReference(expression.operand,counterpart);
+  return false;
+}
+
+function declarationName(node:ts.Node):string|null {
+  let current:ts.Node|undefined=node;
+  while (current) {
+    if (ts.isVariableDeclaration(current)&&ts.isIdentifier(current.name)) return current.name.text;
+    if ((ts.isFunctionDeclaration(current)||ts.isMethodDeclaration(current))&&current.name) return current.name.getText();
+    current=current.parent;
+  }
+  return null;
+}
+
+function hasModifier(node:ts.Node,kind:ts.SyntaxKind):boolean {
+  return ts.canHaveModifiers(node)&&Boolean(ts.getModifiers(node)?.some((modifier)=>modifier.kind===kind));
+}
+
+function functionBody(node:ts.Node):ts.Block|undefined {
+  if (ts.isFunctionDeclaration(node)||ts.isFunctionExpression(node)||ts.isArrowFunction(node)||ts.isMethodDeclaration(node)) {
+    return node.body&&ts.isBlock(node.body) ? node.body : undefined;
+  }
+  return undefined;
+}
+
+function firstDirective(body:ts.Block|undefined):string|null {
+  const statement=body?.statements[0];
+  return statement&&ts.isExpressionStatement(statement)&&ts.isStringLiteral(statement.expression) ? statement.expression.text : null;
+}
+
 function controlCondition(node:ts.Node):string|null {
   let current:ts.Node|undefined=node;
   while (current.parent) {
@@ -144,8 +241,48 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
     controlFlow:[],segmentConfig:{},
     imports:[],internalPackages:[],envKeys:[],dataSources:[],cacheBehavior:[],clientBoundary:false,
     stateLibraries:[],securitySignals:[],performanceSignals:[],businessRules:[],moduleContracts:[],httpErrors:[],
+    serverFunctions:[],cacheSemantics:[],schemaContracts:[],authorization:[],analyticsEvents:[],
   };
   const statePattern=/(^|\/)(redux|zustand|jotai|mobx|recoil)(\/|$)|@reduxjs\/toolkit/;
+  const moduleUseServer=source.statements.some((statement)=>
+    ts.isExpressionStatement(statement)&&ts.isStringLiteral(statement.expression)&&statement.expression.text==="use server");
+  const usesValibot=/from\s+["']valibot["']/.test(content);
+  const usesYup=/from\s+["'](?:yup|@hookform\/resolvers\/yup)["']/.test(content);
+  const nextCacheImports=new Map<string,CacheSemanticSignal["operation"]>();
+  const nextCacheNamespaces=new Set<string>();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement)||!ts.isStringLiteral(statement.moduleSpecifier)||statement.moduleSpecifier.text!=="next/cache") continue;
+    const bindings=statement.importClause?.namedBindings;
+    if (bindings&&ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        const imported=(element.propertyName ?? element.name).text as CacheSemanticSignal["operation"];
+        if (["cacheLife","cacheTag","unstable_cache","revalidateTag","updateTag","revalidatePath","refresh"].includes(imported)) nextCacheImports.set(element.name.text,imported);
+      }
+    } else if (bindings&&ts.isNamespaceImport(bindings)) nextCacheNamespaces.add(bindings.name.text);
+  }
+  const explicitlyExported=new Set<string>();
+  for (const statement of source.statements) {
+    if (ts.isExportDeclaration(statement)&&!statement.moduleSpecifier&&statement.exportClause&&ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) explicitlyExported.add((element.propertyName ?? element.name).text);
+    }
+  }
+
+  if (moduleUseServer) {
+    for (const statement of source.statements) {
+      if (ts.isFunctionDeclaration(statement)&&statement.name&&(hasModifier(statement,ts.SyntaxKind.ExportKeyword)||explicitlyExported.has(statement.name.text))&&hasModifier(statement,ts.SyntaxKind.AsyncKeyword)) {
+        const base=located(source,statement,statement.name.text);
+        pushUnique(facts.serverFunctions,{...base,symbol:statement.name.text,scope:"file"});
+      }
+      if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          if (!ts.isIdentifier(declaration.name)||!(hasModifier(statement,ts.SyntaxKind.ExportKeyword)||explicitlyExported.has(declaration.name.text))||!declaration.initializer
+            ||!(ts.isArrowFunction(declaration.initializer)||ts.isFunctionExpression(declaration.initializer))||!hasModifier(declaration.initializer,ts.SyntaxKind.AsyncKeyword)) continue;
+          const base=located(source,declaration,declaration.name.text);
+          pushUnique(facts.serverFunctions,{...base,symbol:declaration.name.text,scope:"file"});
+        }
+      }
+    }
+  }
 
   const CONTROL_FLOW:Record<string,ControlFlowSignal["kind"]>={
     redirect:"redirect",permanentRedirect:"permanent-redirect",notFound:"not-found",
@@ -165,6 +302,25 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
 
   const visit=(node:ts.Node):void=>{
     if (ts.isExpressionStatement(node) && ts.isStringLiteral(node.expression) && node.expression.text==="use client") facts.clientBoundary=true;
+    if (ts.isExpressionStatement(node)&&ts.isStringLiteral(node.expression)&&node.parent===source&&node.expression.text.startsWith("use cache")) {
+      const directive=node.expression.text;
+      const base=located(source,node,directive);
+      pushUnique(facts.cacheSemantics,{...base,operation:"use-cache",target:directive.replace(/^use cache:?\s*/,"")||"default",invalidates:false});
+      pushUnique(facts.cacheBehavior,located(source,node,directive));
+    }
+
+    const body=functionBody(node);
+    if (body&&firstDirective(body)==="use server") {
+      const symbol=declarationName(node) ?? enclosingSymbol(node) ?? "anonymous-server-function";
+      const base=located(source,node,symbol);
+      pushUnique(facts.serverFunctions,{...base,symbol,scope:"inline"});
+    }
+    if (body&&firstDirective(body)?.startsWith("use cache")) {
+      const directive=firstDirective(body)!;
+      const base=located(source,body.statements[0]!,directive);
+      pushUnique(facts.cacheSemantics,{...base,operation:"use-cache",target:directive.replace(/^use cache:?\s*/,"")||"default",invalidates:false});
+      pushUnique(facts.cacheBehavior,located(source,body.statements[0]!,directive));
+    }
 
     if (ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&CONTROL_FLOW[node.expression.text]) {
       const first=node.arguments[0];
@@ -174,6 +330,10 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
         conditional:underBranch(node),
         line:source.getLineAndCharacterOfPosition(node.getStart(source)).line+1,
       });
+      if (first&&ts.isStringLiteralLike(first)&&/(?:^|\/)(?:login|sign-in|signin)(?:\/|$|\?)/i.test(first.text)) {
+        const base=located(source,node,first.text);
+        pushUnique(facts.authorization,{...base,mechanism:"login-redirect",requirement:"authenticated user",outcome:`redirect ${first.text}`});
+      }
     }
 
     if (ts.isVariableStatement(node)
@@ -265,8 +425,65 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
         pushUnique(facts.dataSources,{...base,kind});
       }
       const callName=identity.method ?? identity.root;
-      if (["cache","unstable_cache","cacheLife","revalidatePath","revalidateTag"].includes(callName)) {
-        pushUnique(facts.cacheBehavior,located(source,node,`${callName}()`));
+      const operation=nextCacheImports.get(identity.root)
+        ?? (identity.method&&nextCacheNamespaces.has(identity.root)&&["cacheLife","cacheTag","unstable_cache","revalidateTag","updateTag","revalidatePath","refresh"].includes(identity.method)
+          ? identity.method as CacheSemanticSignal["operation"] : undefined);
+      if (operation) {
+        pushUnique(facts.cacheBehavior,located(source,node,`${operation}()`));
+        const base=located(source,node,`${operation}(${expressionValue(node.arguments[0])})`);
+        pushUnique(facts.cacheSemantics,{...base,operation,target:staticText(node.arguments[0]) ?? (node.arguments[0] ? expressionValue(node.arguments[0]) : null),invalidates:["revalidatePath","revalidateTag","updateTag","refresh"].includes(operation)});
+      }
+
+      const calleeText=node.expression.getText();
+      const schemaLibrary=/^z\.(?:object|strictObject)$/.test(calleeText) ? "zod"
+        : calleeText==="yup.object"||calleeText.endsWith(".shape")||(usesYup&&calleeText==="object") ? "yup"
+        : usesValibot&&calleeText==="object" ? "valibot" : null;
+      if (schemaLibrary) {
+        const shape=calleeText.endsWith(".shape") ? node.arguments[0] : node.arguments[0];
+        const fields=objectKeys(shape);
+        if (fields.length) {
+          const symbol=declarationName(node) ?? enclosingSymbol(node);
+          const base=located(source,node,`${symbol ?? "schema"}: ${fields.join(", ")}`);
+          pushUnique(facts.schemaContracts,{...base,symbol,kind:"validation-schema",library:schemaLibrary,fields},(item)=>`${item.kind}:${item.symbol}:${item.fields.join(",")}`);
+        }
+      }
+      if ((identity.method==="get"||identity.method==="getAll")&&/formdata/i.test(identity.root)) {
+        const field=staticText(node.arguments[0]);
+        if (field) {
+          const base=located(source,node,field);
+          pushUnique(facts.schemaContracts,{...base,kind:"form-payload",library:"FormData",fields:[field]});
+        }
+      }
+      if (identity.root==="JSON"&&identity.method==="stringify") {
+        const fields=objectKeys(node.arguments[0]);
+        if (fields.length) {
+          const base=located(source,node,fields.join(", "));
+          pushUnique(facts.schemaContracts,{...base,kind:"json-payload",library:"JSON",fields});
+        }
+      }
+
+      const authorizationCalls=/^(?:auth|authenticate|authorize|getServerSession|getSession|requireUser|requireAuth|hasPermission|checkPermission|forbidden|unauthorized)$/i;
+      if (authorizationCalls.test(callName)) {
+        const requirement=staticText(node.arguments[0]) ?? (node.arguments[0] ? expressionValue(node.arguments[0]) : null);
+        const outcome=/^(?:forbidden|unauthorized)$/i.test(callName) ? callName.toLowerCase() : null;
+        const base=located(source,node,`${callName}${requirement ? `: ${requirement}` : ""}`);
+        pushUnique(facts.authorization,{...base,mechanism:callName,requirement,outcome});
+      }
+
+      let event:string|null=null;
+      let transport:string|null=null;
+      let payload:ts.Expression|undefined;
+      if (identity.root==="gtag"&&staticText(node.arguments[0])==="event") {
+        event=staticText(node.arguments[1]); transport="gtag"; payload=node.arguments[2];
+      } else if ((identity.method==="track"||/^(?:trackEvent|sendEvent|logEvent)$/.test(callName))) {
+        event=staticText(node.arguments[0]); transport=identity.method ? `${identity.root}.${identity.method}` : identity.root; payload=node.arguments[1];
+      } else if ((identity.root==="dataLayer"||calleeText.endsWith(".dataLayer.push"))&&identity.method==="push") {
+        event=staticText(objectProperty(node.arguments[0],"event")); transport="dataLayer.push"; payload=node.arguments[0];
+      }
+      if (event&&transport) {
+        const keys=objectKeys(payload).filter((key)=>key!=="event");
+        const base=located(source,node,event);
+        pushUnique(facts.analyticsEvents,{...base,event,transport,payloadKeys:keys},(item)=>`${item.event}:${item.line}`);
       }
       if (["memo","useMemo","useCallback","dynamic"].includes(callName)) {
         pushUnique(facts.performanceSignals,located(source,node,`${callName}()`));
@@ -282,6 +499,12 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
           pushUnique(facts.httpErrors,{...base,status,message,condition:controlCondition(node)});
         }
       }
+    }
+
+    if (ts.isBinaryExpression(node)&&(isAuthorizationReference(node.left,node.right)||isAuthorizationReference(node.right,node.left))) {
+      const requirement=[node.left,node.right].map(staticText).find((value)=>value!=null) ?? node.getText().replace(/\s+/g," ").slice(0,180);
+      const base=located(source,node,requirement);
+      pushUnique(facts.authorization,{...base,mechanism:"role-or-permission-check",requirement,outcome:null});
     }
     ts.forEachChild(node,visit);
   };

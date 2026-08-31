@@ -29,7 +29,7 @@ test("classifies all 15 baseline questions into task-aware intents",()=>{
 });
 
 test("classifies the complete 50-question golden catalog",()=>{
-  const markdown=readFileSync(new URL("../docs/REPOSITORY_CONTEXT_ENGINE_EVALUATION.md",import.meta.url),"utf8");
+  const markdown=readFileSync(new URL("../docs/EVALUATION.md",import.meta.url),"utf8");
   const expected=(id:string):string=>{
     if (id.startsWith("RCE-E")) return "lookup";
     if (id.startsWith("RCE-F")) return "explain-flow";

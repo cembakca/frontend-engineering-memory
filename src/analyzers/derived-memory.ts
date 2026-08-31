@@ -9,6 +9,7 @@ export function repositoryProfileMemory(profile: RepositoryProfile): MemoryCandi
     `router=${profile.routerType}`,
     `packageManager=${profile.packageManager ?? "Unknown"}`,
     `output=${profile.outputMode ?? "Unknown"}`,
+    `package=${profile.packageName ?? "Unknown"}`,
   ];
   return {
     type: "repository_profile",

@@ -6,6 +6,7 @@ import { TaskContextCompiler } from "../retrieval/task-context.js";
 import { FreshnessCache, packFreshness } from "../retrieval/freshness.js";
 import { planQuery } from "../retrieval/query-plan.js";
 import { RetrievalTelemetry } from "../telemetry/retrieval-telemetry.js";
+import { routeLookupKey } from "../retrieval/route-identity.js";
 
 function json(value:string | null | undefined,fallback:any):any {
   if (!value) return fallback;
@@ -14,6 +15,7 @@ function json(value:string | null | undefined,fallback:any):any {
 
 function compactRoute(row:any):any {
   return {
+    ...(row.repository ? {repository:row.repository} : {}),
     route:row.route,type:row.route_type,router:row.router_type,sourceFile:row.source_file,
     rendering:row.rendering_mode,
     // RCE-008: how the classification was reached, and whether the route redirects at all.
@@ -32,7 +34,7 @@ function compactRoute(row:any):any {
 function packResultIds(pack:any):string[] {
   if (Array.isArray(pack?.items)) return pack.items.map((item:any)=>`${item.type}:${item.subject}`);
   if (Array.isArray(pack?.steps)) return pack.steps.map((step:any)=>String(step.to ?? step.affected ?? ""));
-  if (Array.isArray(pack?.relations)) return pack.relations.map((row:any)=>String(row.affected ?? ""));
+  if (Array.isArray(pack?.relations)) return pack.relations.map((row:any)=>String(row.affected ?? row.packageName ?? row.providerRepository ?? ""));
   if (Array.isArray(pack?.changes)) return pack.changes.map((row:any)=>String(row.entity ?? ""));
   if (Array.isArray(pack?.facts)) return pack.facts.map((row:any)=>String(row.subject ?? ""));
   return [];
@@ -57,25 +59,35 @@ export class MemoryTools {
     this.freshness=new FreshnessCache(memoryDb);
   }
 
-  repositories():any { return {repositories:this.store.listRepositories().map((row:any)=>({name:row.name,nextVersion:row.next_version,reactVersion:row.react_version,router:row.router_type,lastIndexedSha:row.last_indexed_sha,lastIndexedAt:row.last_indexed_at}))}; }
+  repositories():any { return {repositories:this.store.listRepositories().map((row:any)=>({name:row.name,packageName:row.package_name,nextVersion:row.next_version,reactVersion:row.react_version,router:row.router_type,lastIndexedSha:row.last_indexed_sha,lastIndexedAt:row.last_indexed_at})),repositoryLinks:this.store.listRepositoryLinks()}; }
 
   repository(name:string):any {
     const row=this.store.getRepository(name);
     if (!row) throw new Error(`Repository not found: ${name}`);
-    return {name:row.name,path:row.path,framework:row.framework,nextVersion:row.next_version,reactVersion:row.react_version,nodeVersion:row.node_version,router:row.router_type,packageManager:row.package_manager,outputMode:row.output_mode,lastIndexedSha:row.last_indexed_sha,lastIndexedAt:row.last_indexed_at};
+    const links=this.store.listRepositoryLinks(name);
+    return {name:row.name,path:row.path,packageName:row.package_name,framework:row.framework,nextVersion:row.next_version,reactVersion:row.react_version,nodeVersion:row.node_version,router:row.router_type,packageManager:row.package_manager,outputMode:row.output_mode,
+      repositoryDependencies:links.filter((link:any)=>link.direction==="outgoing"),repositoryConsumers:links.filter((link:any)=>link.direction==="incoming"),
+      lastIndexedSha:row.last_indexed_sha,lastIndexedAt:row.last_indexed_at};
   }
 
-  routes(repository:string,limit=50):any { return {repository,routes:this.store.listRoutes(repository).slice(0,Math.max(1,Math.min(100,limit))).map(compactRoute)}; }
+  routes(repository:string|undefined,limit=50):any { return {repository:repository ?? null,routes:this.store.listRoutes(repository).slice(0,Math.max(1,Math.min(100,limit))).map(compactRoute)}; }
 
-  route(repository:string,route:string):any {
-    const row=this.store.getRoute(repository,route);
-    if (!row) throw new Error(`Active route not found: ${repository} ${route}`);
+  private routeDetail(row:any):any {
+    const repository=String(row.repository);
+    const actualRoute=String(row.route);
     return {
       repository,...compactRoute(row),layoutChain:json(row.layout_chain_json,[]),clientBoundaries:json(row.client_boundaries_json,[]),
       dataSources:json(row.data_sources_json,[]),backendDependencies:json(row.backend_dependencies_json,[]),cacheBehavior:json(row.cache_behavior_json,[]),
       seoType:row.seo_type,metadataSource:row.metadata_source,middlewareMatchers:json(row.middleware_matchers_json,[]),
-      evidence:json(row.evidence_json,[]),dependencies:this.store.listRouteDependencies(repository,route),
+      evidence:json(row.evidence_json,[]),dependencies:this.store.listRouteDependencies(repository,actualRoute),
     };
+  }
+
+  route(repository:string|undefined,route:string):any {
+    const matches=this.store.findRoutes(route,repository);
+    if (!matches.length) throw new Error(`Active route not found: ${repository ?? "all repositories"} ${route}`);
+    if (repository) return this.routeDetail(matches[0]);
+    return {queryRoute:route,normalizedRoute:routeLookupKey(route),matches:matches.map((row)=>this.routeDetail(row))};
   }
 
   dependencies(repository:string,options:{route?:string;type?:string;limit?:number}={}):any {

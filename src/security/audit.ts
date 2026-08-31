@@ -70,11 +70,13 @@ function valueNeedsSubstringCheck(item:EnvValue):boolean {
 
 function tableContainsEnvValue(memoryDb:MemoryDatabase,table:string,item:EnvValue):boolean {
   const rows=memoryDb.db.prepare(`SELECT * FROM ${table}`).all() as Array<Record<string,unknown>>;
-  for (const row of rows) for (const cell of Object.values(row)) {
+  for (const row of rows) for (const [column,cell] of Object.entries(row)) {
     if (typeof cell!=="string") continue;
     // Exact scalar equality catches even low-entropy values without confusing a
-    // repository path named "production" with an env value of "production".
-    if (cell===item.value) return true;
+    // repository path or controlled enum (`dependency_kind=development`) with
+    // an env value. Low-entropy equality is meaningful only in payload-bearing
+    // prose/JSON columns; high-entropy secrets are checked in every column below.
+    if (cell===item.value&&/(?:content|subject|rationale|note|query_text|_json)$/i.test(column)) return true;
     // Substring matching is reserved for secrets/high-entropy values and URLs;
     // these commonly appear inside prose or JSON when a leak really occurs.
     if (valueNeedsSubstringCheck(item)&&cell.includes(item.value)) return true;

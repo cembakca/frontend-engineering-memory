@@ -2,7 +2,7 @@ import type { GraphEdge, GraphEdgeType, GraphNodeKind } from "../analyzers/symbo
 
 /** Relations whose source semantically depends on their target. */
 const REVERSE_IMPACT_EDGES:GraphEdgeType[]=[
-  "calls","renders","reads","fetches","inherits","submits-to","references","delegates-to",
+  "calls","renders","reads","fetches","inherits","submits-to","references","delegates-to","tags","invalidates",
 ];
 
 export interface ImpactRoute {

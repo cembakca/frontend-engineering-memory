@@ -13,6 +13,8 @@ import { planQuery } from "./query-plan.js";
 import { hybridSearch } from "./search.js";
 import { TemporalContextEngine } from "./temporal.js";
 import { buildDecisionContext, isDecisionQuestion } from "./decision-context.js";
+import { createAnswerContract } from "./answer-contract.js";
+import { routesEquivalent } from "./route-identity.js";
 
 interface SemanticSnapshot {
   edges:GraphEdge[];
@@ -30,6 +32,11 @@ function isRepositoryStrategyQuestion(question:string):boolean {
   const repositoryScope=/\b(project|proje(?:nin|de|yi)?|repository|repo)\b/i.test(question);
   const strategyScope=/\b(strategy|strateji(?:si)?|testing|test|error[- ]handling|hata yönetimi)\b/i.test(question);
   return repositoryScope&&strategyScope;
+}
+
+function isRepositoryDependencyQuestion(question:string):boolean {
+  return /\b(cross[- ]repo|inter[- ]repo|repository dependenc|repo dependenc|depends on (?:which )?repo|which repo(?:s)? (?:uses?|consumes?))\b/i.test(question)
+    || /(?:repo|repository).{0,30}(?:bağımlı|bağımlılık|kullanıyor|tüketiyor)|(?:bağımlı|bağımlılık).{0,30}(?:repo|repository)/i.test(question);
 }
 
 /**
@@ -80,7 +87,8 @@ function resolveSeed(question:string,edges:GraphEdge[],explicit:string[],mode:"f
   const queryTerms=new Set(terms(question));
 
   if (explicit.length) {
-    const exact=explicit.find((value)=>edges.some((edge)=>edge.from===value||edge.to===value||edge.from.startsWith(`${value}#`)||edge.to.startsWith(`${value}#`)));
+    const exact=explicit.find((value)=>edges.some((edge)=>edge.from===value||edge.to===value||edge.from.startsWith(`${value}#`)||edge.to.startsWith(`${value}#`)
+      ||(value.startsWith("/")&&(routesEquivalent(edge.from,value)||routesEquivalent(edge.to,value)))));
     if (exact) {
       if (mode==="impact") return exact;
       // A file is not a traversal entry point; descend to the symbols it declares.
@@ -153,6 +161,37 @@ export class TaskContextCompiler {
     const repository=this.store.getRepository(options.repository);
     if (!repository) throw new Error(`Repository not found: ${options.repository}`);
     const snapshotSha=repository.last_indexed_sha as string|null;
+
+    if (isRepositoryDependencyQuestion(question)) {
+      const relations=this.store.listRepositoryLinks(options.repository).map((link:any)=>({
+        claimKind:"derived-relation",
+        direction:link.direction,
+        consumerRepository:link.consumer_repository,
+        providerRepository:link.provider_repository,
+        packageName:link.package_name,
+        dependencyKind:link.dependency_kind,
+        evidence:{repository:link.consumer_repository,file:link.source_file,sha:link.last_seen_sha},
+      }));
+      const pack:any={schemaVersion:"1.0",kind:"repository-dependencies",query:question,repository:options.repository,snapshotSha,
+        ...(freshness ? {freshness} : {}),relations,
+        budget:{maxChars,usedChars:0,estimatedTokens:0,truncated:false,omitted:{}},
+        answerContract:createAnswerContract({derivedRelations:relations.length ? ["relations"] : [],
+          facts:relations.length ? ["relations[*].packageName"] : [],
+          uncertainty:[],missingEvidence:[],sourceFallback:[],empty:false}),
+      };
+      while (JSON.stringify(pack).length>maxChars&&pack.relations.length) {
+        pack.relations.pop();
+        pack.budget.truncated=true;
+        pack.budget.omitted.relations=(pack.budget.omitted.relations ?? 0)+1;
+      }
+      if (pack.budget.truncated) pack.answerContract=createAnswerContract({
+        derivedRelations:pack.relations.length ? ["relations"] : [],facts:pack.relations.length ? ["relations[*].packageName"] : [],
+        truncated:true,empty:false,
+      });
+      pack.budget.usedChars=JSON.stringify(pack).length;
+      pack.budget.estimatedTokens=Math.ceil(pack.budget.usedChars/3.5);
+      return pack;
+    }
 
     if (!["explain-flow","impact","implementation-plan","debug","change-review","verify"].includes(plan.intent)) {
       return buildAgentContext(this.memoryDb,question,{repository:options.repository,memoryTypes:options.types,maxChars,

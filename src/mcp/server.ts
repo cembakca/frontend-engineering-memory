@@ -8,8 +8,8 @@ import { MemoryDatabase } from "../memory/database.js";
 import { MemoryTools } from "./tools.js";
 
 const memoryTypes=[
-  "repository_profile","rendering","api_dependency","data_fetching","cache","authentication","middleware",
-  "state_management","design_system","shared_package","seo","analytics","error_handling","module_contract","configuration","build",
+  "repository_profile","rendering","api_dependency","data_fetching","cache","cache_invalidation","server_function","authentication","authorization","middleware",
+  "state_management","design_system","shared_package","seo","analytics","analytics_event","error_handling","module_contract","schema_contract","next_config","special_file","configuration","build",
   "dependency","security","performance_observation","business_capability","business_rule","technical_debt",
 ] as const;
 
@@ -24,7 +24,7 @@ function failure(error:unknown) {
 
 function readOnly() { return {readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}; }
 
-export const MCP_INSTRUCTIONS="Use memory_repository or memory_route for exact inventory. Use memory_context once for engineering questions. Use atSha for an indexed historical view and compareToSha for behavior diff; why/rationale answers require approved decisions. Follow answerContract; open only its sourceFallback files when uncertainty remains. All tools are read-only.";
+export const MCP_INSTRUCTIONS="Use memory_repository for exact repository inventory and cross-repository package links. Use memory_route without repository to locate a route across the indexed fleet, then with repository for its exact behavior and dependencies. Turkish/Unicode route aliases are normalized for lookup. Use memory_context once for engineering questions. Use atSha for an indexed historical view and compareToSha for behavior diff; why/rationale answers require approved decisions. Follow answerContract; open only its sourceFallback files when uncertainty remains. All tools are read-only.";
 
 export function createMemoryMcpServer(memoryDb=new MemoryDatabase()):McpServer {
   const tools=new MemoryTools(memoryDb);
@@ -37,13 +37,13 @@ export function createMemoryMcpServer(memoryDb=new MemoryDatabase()):McpServer {
   );
 
   server.registerTool("memory_repository",{
-    title:"List or get memory repositories",description:"Without repository, list indexed repositories and SHAs. With repository, return its exact profile and freshness metadata.",
+    title:"List or get memory repositories",description:"Without repository, list indexed repositories, SHAs, and cross-repository package links. With repository, return its exact profile, dependencies on other indexed repositories, consumers, and freshness metadata.",
     inputSchema:z.object({repository:z.string().min(1).optional()}),annotations:readOnly(),
   },async({repository})=>{ try { return output(repository ? tools.repository(repository) : tools.repositories()); } catch(error) { return failure(error); } });
 
   server.registerTool("memory_route",{
-    title:"List or get routes",description:"Without route, list active routes. With route, return its exact behavior, evidence and dependencies.",
-    inputSchema:z.object({repository:z.string().min(1),route:z.string().startsWith("/").optional(),limit:z.number().int().min(1).max(100).default(50)}),annotations:readOnly(),
+    title:"List, locate or get routes",description:"Repository is optional for fleet-wide discovery. Without route, list active routes. With route, normalize Unicode/Turkish aliases and return matching repositories; with repository, return exact behavior, evidence and dependencies.",
+    inputSchema:z.object({repository:z.string().min(1).optional(),route:z.string().startsWith("/").optional(),limit:z.number().int().min(1).max(100).default(50)}),annotations:readOnly(),
   },async({repository,route,limit})=>{ try { return output(route ? tools.route(repository,route) : tools.routes(repository,limit)); } catch(error) { return failure(error); } });
 
   server.registerTool("memory_context",{

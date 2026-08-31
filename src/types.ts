@@ -17,15 +17,22 @@ export type MemoryType =
   | "api_dependency"
   | "data_fetching"
   | "cache"
+  | "cache_invalidation"
+  | "server_function"
   | "authentication"
+  | "authorization"
   | "middleware"
   | "state_management"
   | "design_system"
   | "shared_package"
   | "seo"
   | "analytics"
+  | "analytics_event"
   | "error_handling"
   | "module_contract"
+  | "schema_contract"
+  | "next_config"
+  | "special_file"
   | "configuration"
   | "build"
   | "dependency"
@@ -60,6 +67,11 @@ export interface RepositoryProfile {
   startCommand: string | null;
   devCommand: string | null;
   outputMode: string | null;
+  packageName: string | null;
+  packageDependencies: Array<{
+    name: string;
+    kind: "runtime" | "development" | "optional" | "peer";
+  }>;
   evidenceFiles: string[];
 }
 
