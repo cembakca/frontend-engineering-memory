@@ -43,22 +43,19 @@ Boyutlar ikiye katlanıyor; her dalga bir öncekinin soak süresini tamamlaması
 
 Politikadaki not bilinçli: *repo başına maliyet registry büyürken yükselmemelidir; yükselen bir eğim tasarımın ölçeklenmediğini gösterir ve dalga tutulur.*
 
-## 5. Bugünkü durum
+## 5. Bugünkü durum (31 Ağustos 2026, son doğrulama)
 
 ```text
-decision:     hold
-currentCount: 1     currentWave: pilot     nextWave: diversity
-operatingCost: 5.500.928 bayt (repo başına aynı), p95 3.097 ms — bütçede
+decision:     advance
+currentCount: 2     currentWave: diversity     nextWave: squad (4)
+operatingCost: 12.541.952 bayt / 6.270.976 bayt-repo, p95 3.367 ms — bütçede
 repositories:
-  hangikredi.aboutus.fe.next  healthy=false  tree-dirty  duplication 0.3886  evidence 1.0
-blockers:
-  - acceptance gate is blocked: 6 blocker(s)
-  - hangikredi.aboutus.fe.next below the health floor: duplication 0.3886 over 0.05
+  hangikredi.aboutus.fe.next  healthy=true  tree-dirty  duplication 0       evidence 1.0
+  hangikredi.revolt.fe.next   healthy=true  fresh       duplication 0.0321  evidence 1.0
+gate: open; blockers: []
 ```
 
-İki bağımsız neden: RCE-028 kapısı kapalı **ve** pilotun kendisi taban altında. `duplicationRatio` 0,3886 → RCE-005 normalizasyonu henüz uygulanmadı; tasarım hazır, migration yapılmadı.
-
-İşletim maliyeti tarafı sağlıklı: 5,5 MB ve p95 3 saniye, ikisi de bütçede. Yani darboğaz maliyet değil, **doğruluk**.
+Temiz pilot yeniden-indeksinde kabul koşusu 15/15 clean, 7/7 strict ve 0,9231 mean evidence recall verdi. Etkin medyan tasarruf +3.257 token; motor yalnız 1/14 karşılaştırılabilir vakada source okumaktan pahalı kaldı. Güvenlik ve bloke eden semantic gap sayısı sıfır. İki mevcut repository sağlık tabanının üstünde ve bir sonraki 4-repository dalgasına geçiş açıktır; yapılandırılmış soak süreleri yine korunur.
 
 ## 6. Testlerin kanıtladığı
 

@@ -11,6 +11,16 @@ export interface DataSourceSignal extends LocatedSignal {
   kind: "fetch" | "axios" | "ky" | "graphql" | "api-client";
 }
 
+export interface ModuleContractSignal extends LocatedSignal {
+  kind:"nullable-return"|"registry";
+}
+
+export interface HttpErrorSignal extends LocatedSignal {
+  status:number;
+  message:string;
+  condition:string|null;
+}
+
 /** `redirect()` / `notFound()` are control flow, not rendering: a page that redirects never renders. */
 export interface ControlFlowSignal {
   kind:"redirect"|"permanent-redirect"|"not-found";
@@ -34,12 +44,19 @@ export interface SourceFacts {
   securitySignals: LocatedSignal[];
   performanceSignals: LocatedSignal[];
   businessRules: LocatedSignal[];
+  moduleContracts: ModuleContractSignal[];
+  httpErrors: HttpErrorSignal[];
 }
 
 function nodeName(node: ts.Node): string | null {
-  if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isMethodDeclaration(node) || ts.isVariableDeclaration(node)) && node.name) {
+  if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isMethodDeclaration(node)) && node.name) {
     return node.name.getText();
   }
+  // A local value (`const response = fetch(...)`) is evidence inside its owner,
+  // not a traversal entry point. Only variables that themselves declare a
+  // callable are symbols.
+  if (ts.isVariableDeclaration(node)&&node.name&&node.initializer
+    &&(ts.isArrowFunction(node.initializer)||ts.isFunctionExpression(node.initializer))) return node.name.getText();
   if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
     const parent=node.parent;
     if (ts.isVariableDeclaration(parent) && parent.name) return parent.name.getText();
@@ -70,6 +87,29 @@ function expressionValue(expression: ts.Expression | undefined): string {
   if (!expression) return "unknown";
   if (ts.isStringLiteralLike(expression)) return expression.text;
   return expression.getText().replace(/\s+/g," ").slice(0,240);
+}
+
+function objectProperty(expression:ts.Expression|undefined,name:string):ts.Expression|undefined {
+  if (!expression||!ts.isObjectLiteralExpression(expression)) return undefined;
+  for (const property of expression.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const key=property.name.getText().replace(/^["']|["']$/g,"");
+    if (key===name) return property.initializer;
+  }
+  return undefined;
+}
+
+function controlCondition(node:ts.Node):string|null {
+  let current:ts.Node|undefined=node;
+  while (current.parent) {
+    if (ts.isIfStatement(current.parent)) {
+      const condition=current.parent.expression.getText().replace(/\s+/g," ").slice(0,240);
+      return current.parent.elseStatement&&current.pos>=current.parent.elseStatement.pos ? `not (${condition})` : condition;
+    }
+    if (ts.isCatchClause(current.parent)) return "an exception is caught";
+    current=current.parent;
+  }
+  return null;
 }
 
 function callIdentity(expression: ts.LeftHandSideExpression): {root:string;method:string|null} {
@@ -103,7 +143,7 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
   const facts: SourceFacts={
     controlFlow:[],segmentConfig:{},
     imports:[],internalPackages:[],envKeys:[],dataSources:[],cacheBehavior:[],clientBoundary:false,
-    stateLibraries:[],securitySignals:[],performanceSignals:[],businessRules:[],
+    stateLibraries:[],securitySignals:[],performanceSignals:[],businessRules:[],moduleContracts:[],httpErrors:[],
   };
   const statePattern=/(^|\/)(redux|zustand|jotai|mobx|recoil)(\/|$)|@reduxjs\/toolkit/;
 
@@ -149,6 +189,38 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
           : initializer.kind===ts.SyntaxKind.TrueKeyword ? "true"
           : initializer.kind===ts.SyntaxKind.FalseKeyword ? "false" : null;
         if (value!=null) facts.segmentConfig[name]=value;
+      }
+    }
+
+    if (sourceFile.startsWith("src/")&&ts.isVariableDeclaration(node)&&node.parent?.parent?.parent===source&&ts.isIdentifier(node.name)
+      &&node.initializer&&ts.isObjectLiteralExpression(node.initializer)
+      &&/(?:config|registry|adapter|provider|feature|handler)/i.test(node.name.text)) {
+      const keys=node.initializer.properties.flatMap((property)=>{
+        if (ts.isPropertyAssignment(property)||ts.isShorthandPropertyAssignment(property)||ts.isMethodDeclaration(property)) {
+          return [property.name.getText().replace(/^["']|["']$/g,"")];
+        }
+        return [];
+      }).slice(0,30);
+      if (keys.length) {
+        const base=located(source,node,`${node.name.text} defines registered entries: ${keys.join(", ")}`);
+        pushUnique(facts.moduleContracts,{...base,kind:"registry"});
+      }
+    }
+
+    if (ts.isReturnStatement(node)&&node.expression) {
+      let condition:string|null=null;
+      const expression=node.expression;
+      if (expression.kind===ts.SyntaxKind.NullKeyword) condition=controlCondition(node) ?? "the function reaches its null return";
+      else if (ts.isConditionalExpression(expression)) {
+        if (expression.whenTrue.kind===ts.SyntaxKind.NullKeyword) condition=expression.condition.getText();
+        else if (expression.whenFalse.kind===ts.SyntaxKind.NullKeyword) condition=`not (${expression.condition.getText()})`;
+      } else if (ts.isBinaryExpression(expression)&&expression.operatorToken.kind===ts.SyntaxKind.QuestionQuestionToken
+        &&expression.right.kind===ts.SyntaxKind.NullKeyword) condition=`${expression.left.getText()} is nullish`;
+      const contractEligible=!sourceFile.endsWith(".tsx")||/(?:^|\/)lib\//.test(sourceFile);
+      if (condition&&contractEligible) {
+        const symbol=enclosingSymbol(node);
+        const base=located(source,node,`${symbol ?? "function"} can return null when ${condition.replace(/\s+/g," ").slice(0,260)}`);
+        pushUnique(facts.moduleContracts,{...base,kind:"nullable-return"});
       }
     }
 
@@ -198,6 +270,17 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
       }
       if (["memo","useMemo","useCallback","dynamic"].includes(callName)) {
         pushUnique(facts.performanceSignals,located(source,node,`${callName}()`));
+      }
+      if ((identity.root==="Response"||identity.root==="NextResponse")&&identity.method==="json") {
+        const statusExpression=objectProperty(node.arguments[1],"status");
+        const status=statusExpression&&ts.isNumericLiteral(statusExpression) ? Number(statusExpression.text) : null;
+        if (status!=null&&status>=400) {
+          const messageExpression=objectProperty(node.arguments[0],"message") ?? objectProperty(node.arguments[0],"error");
+          const message=messageExpression&&ts.isStringLiteralLike(messageExpression)
+            ? messageExpression.text : expressionValue(node.arguments[0]);
+          const base=located(source,node,`${identity.root}.json returns HTTP ${status}: ${message}`);
+          pushUnique(facts.httpErrors,{...base,status,message,condition:controlCondition(node)});
+        }
       }
     }
     ts.forEachChild(node,visit);

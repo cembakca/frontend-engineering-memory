@@ -26,6 +26,12 @@ function terms(value:string):string[] {
     .match(/[a-z0-9_\[\]-]{3,}/g) ?? [];
 }
 
+function isRepositoryStrategyQuestion(question:string):boolean {
+  const repositoryScope=/\b(project|proje(?:nin|de|yi)?|repository|repo)\b/i.test(question);
+  const strategyScope=/\b(strategy|strateji(?:si)?|testing|test|error[- ]handling|hata yönetimi)\b/i.test(question);
+  return repositoryScope&&strategyScope;
+}
+
 /**
  * Outgoing behavioural edges by node, so seed scoring can look at what a
  * candidate actually reaches. `exports` is excluded on purpose: it would give a
@@ -153,6 +159,14 @@ export class TaskContextCompiler {
         metadata:{schemaVersion:"1.0",kind:plan.intent,intent:plan.intent,snapshotSha,...(freshness ? {freshness} : {})}});
     }
 
+    // A repository-wide strategy question needs representative facts, not a
+    // failure-path graph. Keep it below the source-read break-even point; the
+    // repository profile is supplied by the companion repository tool.
+    if ((plan.intent==="debug"||plan.intent==="verify")&&isRepositoryStrategyQuestion(question)) {
+      return buildAgentContext(this.memoryDb,question,{repository:options.repository,memoryTypes:options.types,maxChars:Math.min(maxChars,4_000),
+        metadata:{schemaVersion:"1.0",kind:"repository-strategy",intent:plan.intent,snapshotSha,...(freshness ? {freshness} : {})}});
+    }
+
     let semantic:SemanticSnapshot;
     try { semantic=await this.snapshot(options.repository); }
     catch (error) {
@@ -162,11 +176,23 @@ export class TaskContextCompiler {
     }
 
     const explicit=[...plan.anchors.symbols,...plan.anchors.files,...plan.anchors.config,...(plan.anchors.route ? [plan.anchors.route] : [])];
-    const ranked=await hybridSearch(this.memoryDb,question,{repo:options.repository,memoryTypes:options.types,limit:10});
+    // Traversal packs use hybrid results only as targeted source fallback, so a
+    // wider file set improves recall without injecting extra facts into the pack.
+    // Fact-bearing debug packs stay tight; implementation needs a few exemplars.
+    const retrievalLimit=plan.intent==="explain-flow"||plan.intent==="impact" ? 20
+      : plan.intent==="implementation-plan"||plan.intent==="verify" ? 15 : 10;
+    const ranked=await hybridSearch(this.memoryDb,question,{repo:options.repository,memoryTypes:options.types,limit:retrievalLimit});
     const fallbackFiles=[...new Set(ranked.flatMap((item)=>item.sourceFiles ?? (item.sourceFile ? [item.sourceFile] : [])))];
+    const rankedSymbols=ranked.flatMap((item)=>item.sourceFile&&item.sourceSymbol ? [`${item.sourceFile}#${item.sourceSymbol}`] : []);
 
     if (plan.intent==="explain-flow") {
-      const seed=resolveSeed(question,semantic.edges,explicit,"flow");
+      // A submit handler is a concrete execution boundary and beats a page-level
+      // lexical match when semantic retrieval put it first. Other ranked symbols
+      // are only a last resort; menu/data helpers must not displace layout flows.
+      const topHandler=ranked[0]?.sourceSymbol==="handleSubmit" ? rankedSymbols[0] : undefined;
+      const seed=(topHandler ? resolveSeed(question,semantic.edges,[topHandler],"flow") : null)
+        ?? resolveSeed(question,semantic.edges,explicit,"flow")
+        ?? resolveSeed(question,semantic.edges,rankedSymbols.slice(0,3),"flow");
       if (!seed) return compileContextPack({freshness,kind:"flow",query:question,repository:options.repository,snapshotSha,
         trace:{seed:"unresolved",steps:[],endpoints:[],config:[],prunedSteps:0,truncated:false},gaps:["flow seed could not be resolved"],sourceFallback:fallbackFiles},{maxChars});
       const routeFiles=new Map(semantic.routes.map((route)=>[route.route,route.sourceFile]));

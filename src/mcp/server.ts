@@ -1,5 +1,6 @@
-import { McpServer } from "@modelcontextprotocol/server";
+import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import * as z from "zod/v4";
@@ -8,7 +9,7 @@ import { MemoryTools } from "./tools.js";
 
 const memoryTypes=[
   "repository_profile","rendering","api_dependency","data_fetching","cache","authentication","middleware",
-  "state_management","design_system","shared_package","seo","analytics","error_handling","configuration","build",
+  "state_management","design_system","shared_package","seo","analytics","error_handling","module_contract","configuration","build",
   "dependency","security","performance_observation","business_capability","business_rule","technical_debt",
 ] as const;
 
@@ -51,6 +52,23 @@ export function createMemoryMcpServer(memoryDb=new MemoryDatabase()):McpServer {
   },async({question,repository,types,maxChars,since,atSha,compareToSha})=>{ try { return output(await tools.context(question,{repository,types,maxChars,since,atSha,compareToSha})); } catch(error) { return failure(error); } });
 
   return server;
+}
+
+/**
+ * The same tool surface over HTTP, for clients that connect by URL (Cursor and
+ * friends) rather than by spawning a process. One factory backs both entries, so
+ * a stdio client and an HTTP client always see identical tools.
+ *
+ * Stateless by construction: each request gets a fresh server over the shared
+ * database handle, which keeps the endpoint safe to expose from the long-running
+ * HTTP server without holding per-session state.
+ */
+export function createMemoryMcpHttpHandler(memoryDb:MemoryDatabase) {
+  const handler=createMcpHandler(()=>createMemoryMcpServer(memoryDb));
+  return {
+    node:toNodeHandler(handler,{onerror:(error:unknown)=>console.error(`[memory-mcp/http] ${(error as Error).message}`)}),
+    close:()=>handler.close(),
+  };
 }
 
 export function serveMemoryMcp():void {

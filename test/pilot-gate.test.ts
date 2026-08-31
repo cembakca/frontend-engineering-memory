@@ -123,6 +123,25 @@ test("states the diversity requirement it cannot yet confirm for a registered ca
     const report=await evaluateSecondPilotGate(memoryDb,{...files,candidate:"pilot"});
     const diversity=report.checks.find((item)=>item.id==="candidate.diversity");
     assert.equal(diversity?.status,"unknown");
-    assert.match(diversity!.threshold,/router or architecture/);
+    assert.match(diversity!.threshold,/router or Next\.js major/);
+  } finally { await cleanup(); }
+});
+
+test("confirms diversity from an indexed candidate on another Next.js major",async()=>{
+  const {root,memoryDb,cleanup}=await fixture();
+  try {
+    const registry=path.join(root,"repositories.json");
+    await writeFile(registry,JSON.stringify({repositories:[
+      {name:"pilot",path:path.join(root,"pilot"),mainBranch:"main"},
+      {name:"candidate",path:path.join(root,"candidate"),mainBranch:"main"},
+    ]}));
+    memoryDb.db.prepare("UPDATE repositories SET next_version='16.3.0' WHERE name='pilot'").run();
+    memoryDb.db.prepare("INSERT INTO repositories(name,path,router_type,next_version,last_indexed_sha) VALUES(?,?,?,?,?)")
+      .run("candidate",path.join(root,"candidate"),"app","https://packages/next-15.5.2.tgz","b".repeat(40));
+    const files=await runFiles(root,passingEvalRun(),passingEconomyRun());
+    const report=await evaluateSecondPilotGate(memoryDb,{...files,candidate:"candidate"});
+    const diversity=report.checks.find((item)=>item.id==="candidate.diversity");
+    assert.equal(diversity?.status,"pass");
+    assert.match(diversity!.measured,/Next\.js 16->15/);
   } finally { await cleanup(); }
 });

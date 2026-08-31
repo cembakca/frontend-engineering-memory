@@ -13,6 +13,7 @@ import { startReconciliationScheduler } from "./sync/reconcile.js";
 import { evaluateFreshness } from "./retrieval/freshness.js";
 import { extractSymbolGraph } from "./analyzers/symbol-graph.js";
 import { routeEntriesFrom, traceFlow } from "./retrieval/flow.js";
+import { createMemoryMcpHttpHandler } from "./mcp/server.js";
 import { ProjectionCache } from "./ui/projection.js";
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
@@ -59,12 +60,17 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
   const feedback = new AnswerFeedback(memoryDb);
   const telemetry = new RetrievalTelemetry(memoryDb);
   const projections = new ProjectionCache(memoryDb);
+  const mcp = createMemoryMcpHttpHandler(memoryDb);
   const host = process.env.MEMORY_HOST ?? "127.0.0.1";
   const port = Number(process.env.MEMORY_PORT ?? 4317);
 
   const server = http.createServer(async (req,res) => {
     try {
       const url = new URL(req.url ?? "/",`http://${req.headers.host ?? "localhost"}`);
+
+      // MCP over HTTP, for clients that connect by URL instead of spawning stdio.
+      if (url.pathname === "/mcp") return void await mcp.node(req,res);
+
       if (req.method === "GET" && url.pathname === "/health") return json(res,200,{ok:true,vectorEnabled:memoryDb.vectorEnabled});
 
       // ---- browser UI ----
@@ -183,7 +189,10 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
     }
   });
   const stopScheduler=startReconciliationScheduler(memoryDb,enqueue);
-  server.on("close",stopScheduler);
-  server.listen(port,host,()=>console.log(`[memory] server listening on http://${host}:${port}`));
+  server.on("close",()=>{ stopScheduler(); void mcp.close(); });
+  server.listen(port,host,()=>{
+    console.log(`[memory] server listening on http://${host}:${port}`);
+    console.log(`[memory] browser readout http://${host}:${port}/  ·  MCP endpoint http://${host}:${port}/mcp`);
+  });
   return server;
 }

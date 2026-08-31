@@ -47,6 +47,8 @@
     "api_dependency": { "verdict": "keep", "pilotRows": 6, "detail": "Fetch targets; constant resolution is RCE-010's job." },
     "cache": { "verdict": "keep", "pilotRows": 4 },
     "security": { "verdict": "keep", "pilotRows": 2 },
+    "error_handling": { "verdict": "keep", "detail": "HTTP failure responses and their enclosing guard/catch condition are source-verifiable behavior." },
+    "module_contract": { "verdict": "keep", "detail": "Nullable returns and registry/config entries are focused, line-located contracts not represented by the dependency graph." },
     "technical_debt": { "verdict": "keep", "pilotRows": 1 },
     "repository_profile": { "verdict": "keep", "pilotRows": 1 }
   },

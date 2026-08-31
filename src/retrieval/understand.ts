@@ -11,6 +11,8 @@ const TYPE_TERMS:Array<[MemoryType,RegExp]> = [
   ["dependency",/\b(dependency|package|npm)\b/i],
   ["seo",/\b(seo|metadata|canonical|robots|sitemap)\b/i],
   ["security",/\b(security|csp|nonce|authorization)\b/i],
+  ["error_handling",/\b(error|failed|failure|hata|4\d\d|5\d\d)\b/i],
+  ["module_contract",/\b(contract|registry|adapter|provider|pattern)\b/i],
 ];
 
 function extractHttpRoute(raw:string):string|undefined {

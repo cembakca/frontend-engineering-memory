@@ -20,7 +20,7 @@ async function fixture():Promise<{repo:string;memoryDb:MemoryDatabase;cleanup:()
   const root=await mkdtemp(path.join(os.tmpdir(),"fem-audit-"));
   const repo=path.join(root,"pilot");
   await mkdir(repo,{recursive:true});
-  await writeFile(path.join(repo,".env.production"),`GATEWAY_URL=${SECRET}\nEMPTY=\n`);
+  await writeFile(path.join(repo,".env.production"),`GATEWAY_URL=${SECRET}\nPROFILE=production\nEMPTY=\n`);
 
   const registry=path.join(root,"repositories.json");
   await writeFile(registry,JSON.stringify({repositories:[{name:"pilot",path:repo,mainBranch:"main"}]}));
@@ -74,6 +74,15 @@ test("I1 catches an env value stored as a fact",async()=>{
     assert.equal(result.status,"fail");
     assert.ok(result.findings.some((finding)=>finding.includes("memories")));
     assert.equal(report.ok,false);
+  } finally { await cleanup(); }
+});
+
+test("I1 does not confuse a common env word with a substring in a path",async()=>{
+  const {memoryDb,cleanup}=await fixture();
+  try {
+    addMemory(memoryDb,"Configuration is loaded from src/environments/production.ts.");
+    const result=invariant(await runSecurityAudit(memoryDb,{repository:"pilot"}),"I1-no-env-values");
+    assert.equal(result.status,"pass");
   } finally { await cleanup(); }
 });
 

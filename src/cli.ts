@@ -2,6 +2,7 @@ import path from "node:path";
 import { getRepositoryConfig, loadRegistry, projectRoot } from "./config.js";
 import { MemoryDatabase } from "./memory/database.js";
 import { MemoryStore } from "./memory/store.js";
+import { rebuildVectors } from "./memory/vectorize.js";
 import { hybridSearch } from "./retrieval/search.js";
 import { startServer } from "./server.js";
 import { fullIndex, incrementalSync } from "./sync/sync.js";
@@ -22,7 +23,7 @@ import { readJson } from "./utils/fs.js";
 import type { DecisionInput } from "./memory/decisions.js";
 
 function help(): void {
-  console.log(`Frontend Engineering Memory\n\nCommands:\n  repos\n  status\n  full <repository>\n  full-all\n  sync <repository>\n  sync-all\n  reconcile <repository>\n  reconcile-all\n  ai-extract <repository> [--file=src/path.ts]\n  routes <repository>\n  dependencies <repository>\n  route-dependencies <repository> [--route=/path]\n  changes <repository> [--since=<commit>]\n  snapshots <repository>\n  behavior-diff <repository> --from=<sha> --to=<sha>\n  context-at <repository> --sha=<sha> <question>\n  decisions <repository> [query]\n  decision-add <repository> --file=<decision.json>\n  search <query> [--repo=<repository>] [--limit=10]\n  quality [repository]\n  evaluate [evaluation.json]\n  context-eval [evaluation.json]\n  context-economy [--run=<run.json>] [--policy=<AGENTS.md>]\n  telemetry [repository] [--recent=20] [--limit=200] [--prune]\n  freshness [repository]\n  security-audit [repository]\n  pilot-gate [--candidate=<repository>] [--run=<eval.json>] [--economy=<economy.json>]\n  rollout-status [--run=<eval.json>] [--economy=<economy.json>]\n  feedback add <repository> --signal=<sufficient|source-needed|wrong|stale> [--event=<id>] [--query=<text>] [--note=<text>] [--reporter=<who>]\n  feedback backlog [repository] [--state=<new|triaged|case-created|dismissed>] [--limit=50]\n  feedback triage <queryHash> --signal=<signal> --state=<state> [--case=<caseId>]\n  serve\n`);
+  console.log(`Frontend Engineering Memory\n\nCommands:\n  repos\n  status\n  full <repository>\n  full-all\n  sync <repository>\n  sync-all\n  reconcile <repository>\n  reconcile-all\n  vectors [repository]\n  embedding-status\n  ai-extract <repository> [--file=src/path.ts]\n  routes <repository>\n  dependencies <repository>\n  route-dependencies <repository> [--route=/path]\n  changes <repository> [--since=<commit>]\n  snapshots <repository>\n  behavior-diff <repository> --from=<sha> --to=<sha>\n  context-at <repository> --sha=<sha> <question>\n  decisions <repository> [query]\n  decision-add <repository> --file=<decision.json>\n  search <query> [--repo=<repository>] [--limit=10]\n  quality [repository]\n  evaluate [evaluation.json]\n  context-eval [evaluation.json]\n  context-economy [--run=<run.json>] [--policy=<AGENTS.md>]\n  telemetry [repository] [--recent=20] [--limit=200] [--prune]\n  freshness [repository]\n  security-audit [repository]\n  pilot-gate [--candidate=<repository>] [--run=<eval.json>] [--economy=<economy.json>]\n  rollout-status [--run=<eval.json>] [--economy=<economy.json>]\n  feedback add <repository> --signal=<sufficient|source-needed|wrong|stale> [--event=<id>] [--query=<text>] [--note=<text>] [--reporter=<who>]\n  feedback backlog [repository] [--state=<new|triaged|case-created|dismissed>] [--limit=50]\n  feedback triage <queryHash> --signal=<signal> --state=<state> [--case=<caseId>]\n  serve\n`);
 }
 
 async function main(): Promise<void> {
@@ -55,8 +56,11 @@ async function main(): Promise<void> {
         }
       }
       console.log(JSON.stringify(results,null,2));
+      if (results.some((item)=>!item.ok)) process.exitCode=1;
     } else if (command === "reconcile-all") {
-      console.log(JSON.stringify(await reconcileAll(memoryDb),null,2));
+      const results=await reconcileAll(memoryDb);
+      console.log(JSON.stringify(results,null,2));
+      if (results.some((item)=>!item.ok)) process.exitCode=1;
     } else if (command === "ai-extract") {
       const name=args[0]; if (!name) throw new Error("repository name is required");
       const sourceFiles=args.filter((item)=>item.startsWith("--file=")).map((item)=>item.slice(7));
@@ -106,6 +110,15 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(rows,null,2));
     } else if (command === "quality") {
       console.log(JSON.stringify(store.qualityReport(args[0]),null,2));
+    } else if (command === "embedding-status") {
+      console.log(JSON.stringify({
+        enabled:memoryDb.vectorEnabled,profile:memoryDb.embeddingProfile.id,model:memoryDb.embeddingProfile.model,
+        revision:memoryDb.embeddingProfile.revision,dimension:memoryDb.vectorDimension,
+        dtype:memoryDb.embeddingProfile.dtype,vectorTable:memoryDb.vectorTableName,
+        repositories:store.listRepositories().map((row:any)=>({name:row.name,...store.qualityReport(row.name)})),
+      },null,2));
+    } else if (command === "vectors") {
+      console.log(JSON.stringify(await rebuildVectors(memoryDb,args[0]),null,2));
     } else if (command === "evaluate") {
       const file=args[0] ?? path.join(projectRoot(),"config/retrieval-evaluation.json");
       console.log(JSON.stringify(await runRetrievalEvaluation(memoryDb,file),null,2));

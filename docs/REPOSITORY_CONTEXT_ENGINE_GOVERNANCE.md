@@ -83,6 +83,19 @@ Deaktive memory penceresi RCE-006'da yüzeye çıkan gerçek bir sorunu kapsıyo
 
 Her sync koşusunda ve her rollout kapısından önce çalışır. Başarısız invariant kapıyı bloke eder.
 
+## 5.1 MCP HTTP ucu (`/mcp`)
+
+`serve` aynı üç tool'u HTTP üzerinden de sunar. Güvenlik duruşu:
+
+- **Varsayılan olarak yalnız localhost.** Sunucu `127.0.0.1`'e bağlanır; uç ağdan erişilebilir değildir.
+- **Kimlik doğrulama yoktur.** MCP handler istek başlıklarından yetki türetmez ve token doğrulamaz.
+- **Yüzey salt okunurdur.** Üç tool da `readOnlyHint` taşır; bir test bunu HTTP tarafında da doğrular.
+- **`MEMORY_HOST=0.0.0.0` bilinçli bir karardır.** Bu, salt okunur MCP tool'larıyla birlikte hâlihazırda
+  var olan `POST /sync` ve `POST /full-index` uçlarını da ağa açar. Bu durumda kimlik doğrulamalı bir
+  ters vekil zorunludur; aksi halde herhangi biri indekslemeyi tetikleyebilir.
+- **Durum tutulmaz.** Her istek paylaşılan veritabanı tanıtıcısı üzerinde taze bir sunucu alır, bu yüzden
+  uzun ömürlü süreçte oturum durumu birikmez.
+
 ## 6. Bilinçli sınırlar
 
 - **I1 altı karakterden kısa değerleri atlar.** `1`, `true`, `dev` gibi değerler sıradan kelimelerle çakışır ve sızıntı sinyali olarak kullanılamaz. Bu, yanlış pozitifi değil, **kaçırılan gerçek bir vakayı** göze alır; kısa sırlar zaten sır değildir ama kural açıkça yazılmalıdır.

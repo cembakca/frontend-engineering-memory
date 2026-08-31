@@ -150,6 +150,34 @@ export async function analyzeSourceFile(repoPath: string, sourceFile: string): P
     });
   }
 
+  const contracts=new Map<string,typeof facts.moduleContracts>();
+  for (const signal of facts.moduleContracts) {
+    const key=`${signal.kind}:${signal.symbol ?? signal.value}`;
+    contracts.set(key,[...(contracts.get(key) ?? []),signal]);
+  }
+  for (const group of [...contracts.values()].slice(0,20)) {
+    const signal=group[0]!;
+    push(out,{
+      type:"module_contract",subject:`${sourceFile}#${signal.symbol ?? signal.kind}`,
+      content:`${sourceFile}: ${group.map((item)=>item.value).join("; ")}.`,confidence:"verified",sourceFile,
+      sourceSymbol:signal.symbol,startLine:signal.line,endLine:signal.endLine,
+    });
+  }
+  const errors=new Map<string,typeof facts.httpErrors>();
+  for (const signal of facts.httpErrors) {
+    const key=signal.symbol ?? "handler";
+    errors.set(key,[...(errors.get(key) ?? []),signal]);
+  }
+  for (const group of [...errors.values()].slice(0,20)) {
+    const signal=group[0]!;
+    const behavior=group.map((item)=>`HTTP ${item.status} "${item.message}"${item.condition ? ` when ${item.condition}` : ""}`).join("; ");
+    push(out,{
+      type:"error_handling",subject:`${sourceFile}#${signal.symbol ?? "handler"}:http-errors`,
+      content:`${sourceFile} ${signal.symbol ?? "handler"} has error responses: ${behavior}.`,
+      confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:signal.endLine,
+    });
+  }
+
   if (/\b(useQuery|useMutation|QueryClient|HydrationBoundary|dehydrate)\b/.test(content)) {
     const signals = ["useQuery", "useMutation", "QueryClient", "HydrationBoundary", "dehydrate"].filter((s) => content.includes(s));
     push(out, {

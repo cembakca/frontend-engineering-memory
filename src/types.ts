@@ -25,6 +25,7 @@ export type MemoryType =
   | "seo"
   | "analytics"
   | "error_handling"
+  | "module_contract"
   | "configuration"
   | "build"
   | "dependency"
@@ -174,6 +175,8 @@ export interface SearchResult {
   subject: string;
   content: string;
   sourceFile: string | null;
+  /** Closest callable/class that owns the primary evidence, when available. */
+  sourceSymbol?: string | null;
   commitSha: string | null;
   score: number;
   channels: string[];

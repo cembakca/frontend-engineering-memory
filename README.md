@@ -105,7 +105,7 @@ The database is central; no `repository-technical-memory.md` is produced in targ
 - Git
 - Target repositories available on the filesystem
 
-The first semantic indexing/search downloads the local embedding model (`Xenova/multilingual-e5-small`) through Transformers.js. Set `MEMORY_EMBEDDINGS_ENABLED=0` if you want deterministic + FTS indexing only.
+The first semantic indexing/search downloads the pinned local embedding profile (`multilingual-e5-small-v1`) through Transformers.js. The profile fixes the model revision, 384-vector dimension, q8 dtype and E5 query/passage prefixes as one reproducible contract. Set `MEMORY_EMBEDDINGS_ENABLED=0` if you want deterministic + FTS indexing only.
 
 ## Setup
 
@@ -153,6 +153,27 @@ On sync the service performs `fetch` and resets that **dedicated clean checkout*
 ```bash
 npm run memory -- full hangikredi.deposit.fe.next
 ```
+
+For a fleet, validate one repository first and then run the bounded batch commands:
+
+```bash
+pnpm memory full hangikredi.deposit.fe.next
+pnpm memory full-all
+pnpm memory embedding-status
+pnpm memory rollout-status
+```
+
+`full-all`, `sync-all` and `reconcile-all` isolate failures per repository. Add repositories in the configured 2 → 4 → 8 → 16 rollout waves; do not jump directly from two repositories to sixteen. The complete onboarding and rollback sequence is in [`docs/NEXTJS_FLEET_RUNBOOK.md`](docs/NEXTJS_FLEET_RUNBOOK.md).
+
+When an embedding profile changes, stored vectors are isolated in a fingerprinted table. Rebuild them explicitly after selecting the profile:
+
+```bash
+pnpm memory vectors                 # all repositories
+pnpm memory vectors <repository>    # one repository
+pnpm memory embedding-status
+```
+
+The measured model decision and larger profiles retained for future A/B runs are documented in [`docs/EMBEDDING_MODEL_EVALUATION.md`](docs/EMBEDDING_MODEL_EVALUATION.md).
 
 The DB is created at:
 
@@ -266,6 +287,34 @@ MEMORY_AI_EXTRACTOR_URL=http://127.0.0.1:8080/extract \
 npm run memory -- ai-extract hangikredi.deposit.fe.next --file=src/app/page.tsx
 ```
 
+## MCP over HTTP
+
+`serve` exposes the same three tools at `/mcp`, for clients that connect by URL instead of spawning a
+process. One factory backs both entries, so an HTTP client and a stdio client always see an identical
+surface — verified by a test.
+
+```bash
+pnpm serve   # http://127.0.0.1:4317/mcp
+```
+
+Cursor (Settings → MCP → Add), or `.cursor/mcp.json` in a project:
+
+```json
+{ "mcpServers": { "frontend-memory": { "url": "http://127.0.0.1:4317/mcp" } } }
+```
+
+Claude Code keeps working over stdio against `dist/mcp/server.js`; nothing about that changes. Use
+stdio when the client can spawn a process and HTTP when it cannot, or when several editors should
+share one running index.
+
+Serving is stateless: each request gets a fresh server over the shared database handle, so no session
+state accumulates in the long-running process.
+
+**Exposure.** The server binds to `127.0.0.1` by default and the MCP endpoint performs no
+authentication. Setting `MEMORY_HOST=0.0.0.0` publishes the read-only MCP tools *and* the existing
+`POST /sync` and `POST /full-index` endpoints to the network. Put it behind a reverse proxy with auth
+before doing that.
+
 ## Browser readout
 
 `serve` also hosts a read-only UI at the same port. It pages through every indexed repository and
@@ -375,4 +424,4 @@ This remains conservative static analysis, not a full TypeScript semantic compil
 1. Register the MCP server in Codex and Claude and add the memory-first agent guidance to the target repository.
 2. Expand `config/retrieval-evaluation.json` with real engineering questions and track Recall@K.
 3. Keep CI incremental sync enabled after main merges; use scheduled reconciliation as drift protection.
-4. Add more repositories only after the current pilot's retrieval precision is satisfactory.
+4. Grow through the measured 2 → 4 → 8 → 16 waves; require `rollout-status` to return `advance` before each wave.

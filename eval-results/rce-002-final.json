@@ -8,18 +8,17 @@
   "shaMatchesTarget": true,
   "workingTreeDirty": false,
   "workingTreeStatus": "",
-  "ranAt": "2026-08-31T12:14:18.967Z",
+  "ranAt": "2026-08-31T14:19:11.598Z",
   "totals": {
     "cases": 15,
     "toolCalls": 16,
-    "engineTokens": 22486,
+    "engineTokens": 22513,
     "baselineTokens": 81059,
     "baselineSourceFiles": 59,
-    "meanEvidenceRecall": 0.9115,
-    "medianContextSavingPercent": 71.6,
+    "meanEvidenceRecall": 0.9231,
+    "medianContextSavingPercent": 69.2,
     "missClassCounts": {
-      "none": 11,
-      "missing-fact": 4
+      "none": 15
     }
   },
   "cases": [
@@ -43,7 +42,7 @@
           },
           "chars": 3707,
           "tokens": 1060,
-          "latencyMs": 0,
+          "latencyMs": 1,
           "ok": true,
           "returned": [
             "route:/ rendering=rsc source=src/app/page.tsx deps=8"
@@ -122,137 +121,9 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 7985,
-          "tokens": 2282,
-          "latencyMs": 1115,
-          "ok": true,
-          "returned": [
-            "calls:src/lib/contact.ts#getContactChannels",
-            "calls:src/lib/gateway.ts#fetchAboutPage",
-            "references:src/lib/gateway.ts#GATEWAY_URL",
-            "reads:GATEWAY_URL",
-            "fetches:GET ${GATEWAY_URL}/pages/aboutus/${slug}",
-            "renders:src/components/Breadcrumbs.tsx#Breadcrumbs",
-            "calls:src/components/Breadcrumbs.tsx#getDefaultBreadcrumbTrail",
-            "calls:src/lib/site-origin.ts#getSiteOrigin",
-            "reads:HOST",
-            "reads:NEXT_PUBLIC_HOST",
-            "renders:src/components/AboutHero.tsx#AboutHero",
-            "renders:src/components/ui/CdnImage.tsx#CdnImage",
-            "calls:src/components/ui/CdnImage.tsx#resolveSrc",
-            "calls:src/lib/cdn-path.ts#proxyCdnPath",
-            "reads:NEXT_PUBLIC_CDN_ZONE",
-            "reads:CDN_ZONE",
-            "reads:NEXT_PUBLIC_BUILD_NUMBER",
-            "reads:NEXT_PUBLIC_STATIC_FILES_CDN_URL",
-            "renders:src/components/AboutHero.tsx#HeroHighlight",
-            "renders:src/components/contact/ContactInfoBand.tsx#ContactInfoBand",
-            "renders:src/components/ui/CdnImage.tsx#CdnImage",
-            "renders:src/components/contact/ContactForm.tsx#ContactForm",
-            "calls:src/lib/site-origin.ts#siteUrl",
-            "calls:src/lib/site-origin.ts#getPublicSiteOrigin",
-            "reads:NEXT_PUBLIC_HOST",
-            "renders:src/components/contact/ContactMap.tsx#ContactMap"
-          ]
-        }
-      ],
-      "toolCalls": 1,
-      "engine": {
-        "chars": 7985,
-        "tokens": 2282,
-        "latencyMs": 1119,
-        "error": null
-      },
-      "baseline": {
-        "files": 5,
-        "chars": 35120,
-        "tokens": 10035,
-        "discoveryChars": 3183
-      },
-      "contextSavingPercent": 77.3,
-      "evidence": {
-        "expected": 5,
-        "found": 4,
-        "recall": 0.8,
-        "missing": [
-          "src/lib/captcha/get-captcha-token.ts"
-        ],
-        "citedButNotExpected": [
-          "src/components/NewsletterForm.tsx",
-          "src/app/api/customer-services/v2/subscribes/route.ts",
-          "src/lib/menu.ts",
-          "src/app/iletisim/page.tsx",
-          "next.config.ts",
-          "src/components/Breadcrumbs.tsx",
-          "src/lib/site-origin.ts",
-          "src/components/AboutHero.tsx",
-          "src/components/ui/CdnImage.tsx",
-          "src/lib/cdn-path.ts",
-          "src/components/contact/ContactInfoBand.tsx",
-          "src/components/contact/ContactMap.tsx"
-        ]
-      },
-      "diagnosis": {
-        "inferredTypes": [
-          "api_dependency"
-        ],
-        "inferredRoute": null,
-        "routeExists": null,
-        "channels": [
-          "fts",
-          "vector"
-        ],
-        "deadTypeFilter": [],
-        "missingFileFacts": [
-          {
-            "file": "src/lib/captcha/get-captcha-token.ts",
-            "focusedTypes": [],
-            "broadTypes": [
-              "rendering"
-            ]
-          }
-        ],
-        "declaredInsufficient": false,
-        "primaryMissClass": "missing-fact",
-        "secondaryMissClasses": [
-          "over-retrieval",
-          "missing-relation"
-        ],
-        "perFileMissClass": [
-          {
-            "file": "src/lib/captcha/get-captcha-token.ts",
-            "class": "missing-fact"
-          }
-        ],
-        "forbiddenClaimsInPack": [],
-        "reason": "1 file(s) missing-fact"
-      },
-      "answerScore": {
-        "taskCorrect": null,
-        "groundedClaims": null,
-        "unsupportedClaims": null,
-        "fallback": null,
-        "notes": ""
-      }
-    },
-    {
-      "caseId": "RCE-F03",
-      "job": "flow",
-      "strict": false,
-      "policy": "memory-sufficient",
-      "question": "Contact captcha tokenı nasıl üretilip upstream header'a dönüşüyor?",
-      "strictFact": "hcaptchaAdapter.execute -> getCaptchaAuth -> body.captchaToken -> readCaptchaFromBody -> buildCaptchaHeaders X-Captcha-Token/X-Captcha-Version",
-      "forbiddenClaims": [
-        "captcha verified in this app",
-        "server-side hcaptcha secret verify"
-      ],
-      "steps": [
-        {
-          "tool": "memory_context",
-          "args": {},
-          "chars": 7049,
-          "tokens": 2014,
-          "latencyMs": 20,
+          "chars": 7467,
+          "tokens": 2134,
+          "latencyMs": 1150,
           "ok": true,
           "returned": [
             "calls:src/lib/contact.ts#parseContactForm",
@@ -279,9 +150,117 @@
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 7049,
-        "tokens": 2014,
-        "latencyMs": 21,
+        "chars": 7467,
+        "tokens": 2134,
+        "latencyMs": 1151,
+        "error": null
+      },
+      "baseline": {
+        "files": 5,
+        "chars": 35120,
+        "tokens": 10035,
+        "discoveryChars": 3183
+      },
+      "contextSavingPercent": 78.7,
+      "evidence": {
+        "expected": 5,
+        "found": 5,
+        "recall": 1,
+        "missing": [],
+        "citedButNotExpected": [
+          "src/components/NewsletterForm.tsx",
+          "src/lib/menu.ts",
+          "src/app/api/customer-services/v2/subscribes/route.ts",
+          "src/app/iletisim/page.tsx",
+          "next.config.ts",
+          "src/lib/cdn-path.ts",
+          "src/app/hakkimizda/page.tsx",
+          "src/app/layout.tsx",
+          "src/app/ekibimiz/page.tsx",
+          "src/app/kariyer/page.tsx",
+          "src/lib/captcha/captcha-config.ts",
+          "src/lib/captcha/captcha-registry.ts",
+          "src/lib/captcha/providers/hcaptcha-adapter.ts",
+          "src/lib/captcha/captcha-messages.ts",
+          "src/lib/captcha/captcha-headers.ts"
+        ]
+      },
+      "diagnosis": {
+        "inferredTypes": [
+          "api_dependency"
+        ],
+        "inferredRoute": null,
+        "routeExists": null,
+        "channels": [
+          "fts",
+          "vector"
+        ],
+        "deadTypeFilter": [],
+        "missingFileFacts": [],
+        "declaredInsufficient": false,
+        "primaryMissClass": null,
+        "secondaryMissClasses": [
+          "over-retrieval"
+        ],
+        "perFileMissClass": [],
+        "forbiddenClaimsInPack": [],
+        "reason": "expected evidence complete; warnings: over-retrieval"
+      },
+      "answerScore": {
+        "taskCorrect": null,
+        "groundedClaims": null,
+        "unsupportedClaims": null,
+        "fallback": null,
+        "notes": ""
+      }
+    },
+    {
+      "caseId": "RCE-F03",
+      "job": "flow",
+      "strict": false,
+      "policy": "memory-sufficient",
+      "question": "Contact captcha tokenı nasıl üretilip upstream header'a dönüşüyor?",
+      "strictFact": "hcaptchaAdapter.execute -> getCaptchaAuth -> body.captchaToken -> readCaptchaFromBody -> buildCaptchaHeaders X-Captcha-Token/X-Captcha-Version",
+      "forbiddenClaims": [
+        "captcha verified in this app",
+        "server-side hcaptcha secret verify"
+      ],
+      "steps": [
+        {
+          "tool": "memory_context",
+          "args": {},
+          "chars": 7440,
+          "tokens": 2126,
+          "latencyMs": 33,
+          "ok": true,
+          "returned": [
+            "calls:src/lib/contact.ts#parseContactForm",
+            "calls:src/lib/contact.ts#validateContactForm",
+            "calls:src/lib/captcha/get-captcha-token.ts#getCaptchaAuth",
+            "calls:src/lib/captcha/get-captcha-token.ts#executeCaptcha",
+            "calls:src/lib/captcha/captcha-config.ts#resolveCaptchaOptions",
+            "calls:src/lib/captcha/captcha-registry.ts#resolveCaptchaAdapter",
+            "references:src/lib/captcha/captcha-registry.ts#adapters",
+            "references:src/lib/captcha/providers/hcaptcha-adapter.ts#hcaptchaAdapter",
+            "calls:src/lib/captcha/providers/hcaptcha-adapter.ts#resolveSiteKey",
+            "reads:NEXT_PUBLIC_HCAPTCHA_SITE_KEY",
+            "reads:NEXT_PUBLIC_HCAPTCHA_ALWAYS_CHALLENGE_KEY",
+            "calls:src/lib/captcha/captcha-messages.ts#messageForCaptchaReason",
+            "submits-to:/api/pages/aboutus/insertcomment",
+            "calls:src/lib/captcha/captcha-headers.ts#readCaptchaFromBody",
+            "references:src/lib/gateway.ts#GATEWAY_URL",
+            "reads:GATEWAY_URL",
+            "fetches:POST ${GATEWAY_URL}/pages/aboutus/insertcomment",
+            "calls:src/lib/captcha/captcha-headers.ts#buildCaptchaHeaders",
+            "calls:src/lib/contact.ts#toInsertCommentPayload"
+          ]
+        }
+      ],
+      "toolCalls": 1,
+      "engine": {
+        "chars": 7440,
+        "tokens": 2126,
+        "latencyMs": 34,
         "error": null
       },
       "baseline": {
@@ -290,22 +269,21 @@
         "tokens": 5383,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 62.6,
+      "contextSavingPercent": 60.5,
       "evidence": {
         "expected": 5,
         "found": 5,
         "recall": 1,
         "missing": [],
         "citedButNotExpected": [
-          "src/components/contact/ContactForm.tsx",
+          "src/lib/captcha/captcha-config.ts",
           "next.config.ts",
-          "src/app/hakkimizda/page.tsx",
-          "src/lib/gateway.ts",
           "src/app/api/customer-services/v2/subscribes/route.ts",
+          "src/lib/gateway.ts",
+          "src/components/contact/ContactForm.tsx",
           "src/lib/menu.ts",
           "src/components/NewsletterForm.tsx",
           "src/lib/contact.ts",
-          "src/lib/captcha/captcha-config.ts",
           "src/lib/captcha/captcha-messages.ts"
         ]
       },
@@ -355,9 +333,9 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 5361,
-          "tokens": 1532,
-          "latencyMs": 20,
+          "chars": 5816,
+          "tokens": 1662,
+          "latencyMs": 15,
           "ok": true,
           "returned": [
             "calls:src/components/agreements/AgreementSidebar.tsx#AgreementSidebar",
@@ -376,8 +354,8 @@
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 5361,
-        "tokens": 1532,
+        "chars": 5816,
+        "tokens": 1662,
         "latencyMs": 21,
         "error": null
       },
@@ -387,24 +365,29 @@
         "tokens": 5402,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 71.6,
+      "contextSavingPercent": 69.2,
       "evidence": {
         "expected": 4,
         "found": 4,
         "recall": 1,
         "missing": [],
         "citedButNotExpected": [
-          "src/app/hakkimizda/page.tsx",
-          "next.config.ts",
           "src/app/api/pages/aboutus/insertcomment/route.ts",
-          "src/app/ekibimiz/page.tsx",
+          "src/app/hakkimizda/page.tsx",
           "src/app/api/customer-services/v2/subscribes/route.ts",
-          "src/app/layout.tsx",
-          "src/lib/menu.ts",
           "src/lib/gateway.ts",
+          "src/lib/captcha/get-captcha-token.ts",
+          "src/lib/captcha/captcha-registry.ts",
+          "src/lib/captcha/providers/hcaptcha-adapter.ts",
+          "next.config.ts",
+          "src/lib/cdn-path.ts",
+          "src/lib/site-origin.ts",
+          "src/lib/media.ts",
+          "src/app/ekibimiz/page.tsx",
           "src/components/agreements/AgreementSidebar.tsx",
           "src/components/agreements/LegalSubNav.tsx",
-          "src/components/layout/SiteChrome.tsx"
+          "src/components/layout/SiteChrome.tsx",
+          "src/app/layout.tsx"
         ]
       },
       "diagnosis": {
@@ -453,28 +436,21 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 8009,
-          "tokens": 2289,
-          "latencyMs": 26,
+          "chars": 3805,
+          "tokens": 1088,
+          "latencyMs": 13,
           "ok": true,
           "returned": [
-            "technical_debt:undefined",
-            "build:undefined",
-            "rendering:undefined",
-            "rendering:undefined",
-            "rendering:undefined",
-            "api_dependency:undefined",
-            "api_dependency:undefined",
-            "rendering:undefined",
-            "api_dependency:undefined",
-            "cache:undefined"
+            "error_handling:src/app/api/pages/aboutus/insertcomment/route.ts#POST:http-errors [fts]",
+            "error_handling:src/app/api/customer-services/v2/subscribes/route.ts#POST:http-errors [fts+vector]",
+            "technical_debt:src/lib/agreements.ts:8 [vector]"
           ]
         },
         {
           "tool": "memory_repository",
           "args": {},
-          "chars": 438,
-          "tokens": 126,
+          "chars": 331,
+          "tokens": 95,
           "latencyMs": 0,
           "ok": true,
           "returned": [
@@ -484,9 +460,9 @@
       ],
       "toolCalls": 2,
       "engine": {
-        "chars": 8447,
-        "tokens": 2414,
-        "latencyMs": 31,
+        "chars": 4136,
+        "tokens": 1182,
+        "latencyMs": 14,
         "error": null
       },
       "baseline": {
@@ -495,26 +471,24 @@
         "tokens": 1313,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": -83.8,
+      "contextSavingPercent": 10,
       "evidence": {
         "expected": 1,
-        "found": 1,
-        "recall": 1,
-        "missing": [],
+        "found": 0,
+        "recall": 0,
+        "missing": [
+          "package.json"
+        ],
         "citedButNotExpected": [
-          "src/lib/agreements.ts",
-          "src/app/hakkimizda/page.tsx",
-          "src/lib/gateway.ts",
-          "src/app/ekibimiz/page.tsx",
-          "src/app/[slug]/page.tsx",
-          "src/lib/menu.ts",
-          "src/app/iletisim/page.tsx",
           "src/app/api/pages/aboutus/insertcomment/route.ts",
-          "next.config.ts"
+          "src/app/api/customer-services/v2/subscribes/route.ts",
+          "src/lib/agreements.ts"
         ]
       },
       "diagnosis": {
-        "inferredTypes": [],
+        "inferredTypes": [
+          "error_handling"
+        ],
         "inferredRoute": null,
         "routeExists": null,
         "channels": [
@@ -522,13 +496,27 @@
           "vector"
         ],
         "deadTypeFilter": [],
-        "missingFileFacts": [],
+        "missingFileFacts": [
+          {
+            "file": "package.json",
+            "focusedTypes": [
+              "repository_profile",
+              "dependency"
+            ],
+            "broadTypes": []
+          }
+        ],
         "declaredInsufficient": true,
         "primaryMissClass": null,
         "secondaryMissClasses": [
           "over-retrieval"
         ],
-        "perFileMissClass": [],
+        "perFileMissClass": [
+          {
+            "file": "package.json",
+            "class": "wrong-intent"
+          }
+        ],
         "forbiddenClaimsInPack": [],
         "reason": "policy report-gap satisfied: the pack declared its own insufficiency"
       },
@@ -558,7 +546,7 @@
           },
           "chars": 3433,
           "tokens": 981,
-          "latencyMs": 1,
+          "latencyMs": 0,
           "ok": true,
           "returned": [
             "route:/ -> src/app/page.tsx",
@@ -577,7 +565,7 @@
       "engine": {
         "chars": 3433,
         "tokens": 981,
-        "latencyMs": 2,
+        "latencyMs": 1,
         "error": null
       },
       "baseline": {
@@ -635,24 +623,24 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 5278,
-          "tokens": 1508,
-          "latencyMs": 13,
+          "chars": 7942,
+          "tokens": 2270,
+          "latencyMs": 8,
           "ok": true,
           "returned": [
             "api_dependency:src/lib/menu.ts:30 [fts+vector]",
-            "api_dependency:src/lib/gateway.ts:17 [vector]",
-            "api_dependency:src/app/api/pages/aboutus/insertcomment/route.ts:70 [vector]",
             "rendering:route:/hakkimizda [fts+vector]",
-            "configuration:NODE_ENV [vector]"
+            "rendering:route:/api/pages/aboutus/insertcomment [fts+vector]",
+            "rendering:route:/ekibimiz [fts+vector]",
+            "rendering:route:/medyada-biz [fts+vector]"
           ]
         }
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 5278,
-        "tokens": 1508,
-        "latencyMs": 14,
+        "chars": 7942,
+        "tokens": 2270,
+        "latencyMs": 8,
         "error": null
       },
       "baseline": {
@@ -661,20 +649,23 @@
         "tokens": 2341,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 35.6,
+      "contextSavingPercent": 3,
       "evidence": {
         "expected": 1,
         "found": 1,
         "recall": 1,
         "missing": [],
         "citedButNotExpected": [
-          "src/lib/gateway.ts",
-          "src/app/api/pages/aboutus/insertcomment/route.ts",
           "src/app/hakkimizda/page.tsx",
+          "src/lib/gateway.ts",
           "src/app/layout.tsx",
           "src/components/AboutHero.tsx",
           "src/components/AwardsSection.tsx",
-          "next.config.ts"
+          "src/app/api/pages/aboutus/insertcomment/route.ts",
+          "src/lib/captcha/captcha-headers.ts",
+          "src/app/ekibimiz/page.tsx",
+          "src/components/Breadcrumbs.tsx",
+          "src/app/medyada-biz/page.tsx"
         ]
       },
       "diagnosis": {
@@ -722,8 +713,8 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 6684,
-          "tokens": 1910,
+          "chars": 7245,
+          "tokens": 2070,
           "latencyMs": 11,
           "ok": true,
           "returned": [
@@ -750,8 +741,8 @@
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 6684,
-        "tokens": 1910,
+        "chars": 7245,
+        "tokens": 2070,
         "latencyMs": 11,
         "error": null
       },
@@ -761,7 +752,7 @@
         "tokens": 8144,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 76.5,
+      "contextSavingPercent": 74.6,
       "evidence": {
         "expected": 4,
         "found": 4,
@@ -770,14 +761,16 @@
         "citedButNotExpected": [
           "src/lib/menu.ts",
           "src/app/api/pages/aboutus/insertcomment/route.ts",
+          "src/components/contact/ContactForm.tsx",
           "next.config.ts",
-          "src/app/hakkimizda/page.tsx",
           "src/lib/captcha/get-captcha-token.ts",
-          "src/lib/captcha/captcha-config.ts",
+          "src/lib/captcha/captcha-headers.ts",
           "src/lib/captcha/captcha-registry.ts",
           "src/lib/captcha/providers/hcaptcha-adapter.ts",
-          "src/lib/captcha/captcha-messages.ts",
-          "src/lib/captcha/captcha-headers.ts"
+          "src/app/hakkimizda/page.tsx",
+          "src/lib/agreements.ts",
+          "src/lib/captcha/captcha-config.ts",
+          "src/lib/captcha/captcha-messages.ts"
         ]
       },
       "diagnosis": {
@@ -824,9 +817,9 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 4234,
-          "tokens": 1210,
-          "latencyMs": 11,
+          "chars": 4577,
+          "tokens": 1308,
+          "latencyMs": 9,
           "ok": true,
           "returned": [
             "calls:src/lib/menu.ts#getMenuList",
@@ -845,9 +838,9 @@
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 4234,
-        "tokens": 1210,
-        "latencyMs": 11,
+        "chars": 4577,
+        "tokens": 1308,
+        "latencyMs": 10,
         "error": null
       },
       "baseline": {
@@ -856,7 +849,7 @@
         "tokens": 1965,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 38.4,
+      "contextSavingPercent": 33.4,
       "evidence": {
         "expected": 3,
         "found": 3,
@@ -864,12 +857,16 @@
         "missing": [],
         "citedButNotExpected": [
           "src/app/hakkimizda/page.tsx",
+          "src/app/api/customer-services/v2/subscribes/route.ts",
           "next.config.ts",
+          "src/lib/gateway.ts",
+          "src/lib/captcha/captcha-registry.ts",
+          "src/lib/cdn-path.ts",
           "src/app/api/pages/aboutus/insertcomment/route.ts",
           "src/app/[slug]/page.tsx",
-          "src/lib/gateway.ts",
-          "src/app/api/customer-services/v2/subscribes/route.ts",
           "src/app/ekibimiz/page.tsx",
+          "src/components/NewsletterForm.tsx",
+          "src/lib/agreements.ts",
           "src/lib/site-origin.ts",
           "src/components/AboutSubNav.tsx",
           "src/components/agreements/LegalSubNav.tsx",
@@ -918,9 +915,9 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 7406,
-          "tokens": 2116,
-          "latencyMs": 11,
+          "chars": 7699,
+          "tokens": 2200,
+          "latencyMs": 10,
           "ok": true,
           "returned": [
             "reads:src/lib/gateway.ts#GATEWAY_URL",
@@ -946,8 +943,8 @@
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 7406,
-        "tokens": 2116,
+        "chars": 7699,
+        "tokens": 2200,
         "latencyMs": 11,
         "error": null
       },
@@ -957,7 +954,7 @@
         "tokens": 4776,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 55.7,
+      "contextSavingPercent": 53.9,
       "evidence": {
         "expected": 5,
         "found": 5,
@@ -967,6 +964,9 @@
           "src/components/NewsletterForm.tsx",
           "src/components/contact/ContactForm.tsx",
           "src/app/hakkimizda/page.tsx",
+          "src/lib/captcha/providers/hcaptcha-adapter.ts",
+          "src/lib/captcha/get-captcha-token.ts",
+          "src/lib/captcha/captcha-registry.ts",
           "src/app/layout.tsx",
           "src/app/iletisim/page.tsx",
           "src/app/ekibimiz/page.tsx",
@@ -1025,9 +1025,9 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 2024,
-          "tokens": 579,
-          "latencyMs": 12,
+          "chars": 2393,
+          "tokens": 684,
+          "latencyMs": 11,
           "ok": true,
           "returned": [
             "reads:next.config.ts#nextConfig"
@@ -1036,9 +1036,9 @@
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 2024,
-        "tokens": 579,
-        "latencyMs": 13,
+        "chars": 2393,
+        "tokens": 684,
+        "latencyMs": 12,
         "error": null
       },
       "baseline": {
@@ -1047,26 +1047,28 @@
         "tokens": 14330,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 96,
+      "contextSavingPercent": 95.2,
       "evidence": {
         "expected": 4,
-        "found": 3,
-        "recall": 0.75,
-        "missing": [
-          "src/lib/captcha/captcha-registry.ts"
-        ],
+        "found": 4,
+        "recall": 1,
+        "missing": [],
         "citedButNotExpected": [
+          "src/lib/captcha/get-captcha-token.ts",
+          "src/lib/captcha/captcha-headers.ts",
+          "src/lib/captcha/captcha-config.ts",
           "src/app/api/pages/aboutus/insertcomment/route.ts",
-          "src/app/api/customer-services/v2/subscribes/route.ts",
           "src/lib/gateway.ts",
+          "src/app/api/customer-services/v2/subscribes/route.ts",
           "src/lib/menu.ts",
-          "src/app/hakkimizda/page.tsx",
+          "src/lib/site-origin.ts",
           "next.config.ts"
         ]
       },
       "diagnosis": {
         "inferredTypes": [
-          "api_dependency"
+          "api_dependency",
+          "module_contract"
         ],
         "inferredRoute": null,
         "routeExists": null,
@@ -1075,29 +1077,15 @@
           "vector"
         ],
         "deadTypeFilter": [],
-        "missingFileFacts": [
-          {
-            "file": "src/lib/captcha/captcha-registry.ts",
-            "focusedTypes": [],
-            "broadTypes": [
-              "rendering"
-            ]
-          }
-        ],
+        "missingFileFacts": [],
         "declaredInsufficient": false,
-        "primaryMissClass": "missing-fact",
+        "primaryMissClass": null,
         "secondaryMissClasses": [
-          "over-retrieval",
-          "missing-relation"
+          "over-retrieval"
         ],
-        "perFileMissClass": [
-          {
-            "file": "src/lib/captcha/captcha-registry.ts",
-            "class": "missing-fact"
-          }
-        ],
+        "perFileMissClass": [],
         "forbiddenClaimsInPack": [],
-        "reason": "1 file(s) missing-fact"
+        "reason": "expected evidence complete; warnings: over-retrieval"
       },
       "answerScore": {
         "taskCorrect": null,
@@ -1122,29 +1110,34 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 8017,
-          "tokens": 2291,
-          "latencyMs": 16,
+          "chars": 7991,
+          "tokens": 2284,
+          "latencyMs": 19,
           "ok": true,
           "returned": [
-            "rendering:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "api_dependency:undefined",
+            "api_dependency:undefined",
             "api_dependency:undefined",
             "api_dependency:undefined",
             "api_dependency:undefined",
             "cache:undefined",
-            "api_dependency:undefined",
-            "cache:undefined",
-            "rendering:undefined",
-            "rendering:undefined",
-            "rendering:undefined"
+            "api_dependency:undefined"
           ]
         }
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 8017,
-        "tokens": 2291,
-        "latencyMs": 17,
+        "chars": 7991,
+        "tokens": 2284,
+        "latencyMs": 20,
         "error": null
       },
       "baseline": {
@@ -1153,28 +1146,26 @@
         "tokens": 12058,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 81,
+      "contextSavingPercent": 81.1,
       "evidence": {
         "expected": 5,
-        "found": 4,
-        "recall": 0.8,
-        "missing": [
-          "src/lib/captcha/captcha-headers.ts"
-        ],
+        "found": 5,
+        "recall": 1,
+        "missing": [],
         "citedButNotExpected": [
           "package.json",
-          "src/app/hakkimizda/page.tsx",
-          "src/lib/gateway.ts",
+          "src/lib/captcha/get-captcha-token.ts",
+          "src/lib/captcha/captcha-registry.ts",
+          "src/lib/captcha/providers/hcaptcha-adapter.ts",
           "src/lib/menu.ts",
-          "src/app/api/pages/aboutus/insertcomment/route.ts",
-          "src/app/ekibimiz/page.tsx",
-          "src/app/medyada-biz/page.tsx",
-          "src/app/layout.tsx",
-          "src/lib/captcha/get-captcha-token.ts"
+          "src/lib/gateway.ts",
+          "src/app/api/pages/aboutus/insertcomment/route.ts"
         ]
       },
       "diagnosis": {
-        "inferredTypes": [],
+        "inferredTypes": [
+          "module_contract"
+        ],
         "inferredRoute": null,
         "routeExists": null,
         "channels": [
@@ -1182,29 +1173,15 @@
           "vector"
         ],
         "deadTypeFilter": [],
-        "missingFileFacts": [
-          {
-            "file": "src/lib/captcha/captcha-headers.ts",
-            "focusedTypes": [],
-            "broadTypes": [
-              "rendering"
-            ]
-          }
-        ],
+        "missingFileFacts": [],
         "declaredInsufficient": true,
-        "primaryMissClass": "missing-fact",
+        "primaryMissClass": null,
         "secondaryMissClasses": [
-          "over-retrieval",
-          "missing-relation"
+          "over-retrieval"
         ],
-        "perFileMissClass": [
-          {
-            "file": "src/lib/captcha/captcha-headers.ts",
-            "class": "missing-fact"
-          }
-        ],
+        "perFileMissClass": [],
         "forbiddenClaimsInPack": [],
-        "reason": "1 file(s) missing-fact"
+        "reason": "expected evidence complete; warnings: over-retrieval"
       },
       "answerScore": {
         "taskCorrect": null,
@@ -1229,28 +1206,28 @@
         {
           "tool": "memory_context",
           "args": {},
-          "chars": 7999,
-          "tokens": 2286,
-          "latencyMs": 16,
+          "chars": 7980,
+          "tokens": 2280,
+          "latencyMs": 15,
           "ok": true,
           "returned": [
-            "api_dependency:undefined",
-            "rendering:undefined",
-            "cache:undefined",
-            "cache:undefined",
-            "api_dependency:undefined",
-            "cache:undefined",
-            "api_dependency:undefined",
-            "cache:undefined",
-            "api_dependency:undefined",
-            "api_dependency:undefined"
+            "error_handling:undefined",
+            "error_handling:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined",
+            "module_contract:undefined"
           ]
         }
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 7999,
-        "tokens": 2286,
+        "chars": 7980,
+        "tokens": 2280,
         "latencyMs": 16,
         "error": null
       },
@@ -1260,31 +1237,26 @@
         "tokens": 6942,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 67.1,
+      "contextSavingPercent": 67.2,
       "evidence": {
         "expected": 2,
-        "found": 1,
-        "recall": 0.5,
-        "missing": [
-          "src/lib/captcha/captcha-headers.ts"
-        ],
+        "found": 2,
+        "recall": 1,
+        "missing": [],
         "citedButNotExpected": [
-          "src/components/contact/ContactForm.tsx",
-          "src/app/hakkimizda/page.tsx",
-          "src/lib/gateway.ts",
-          "src/lib/agreements.ts",
-          "src/lib/menu.ts",
           "src/app/api/customer-services/v2/subscribes/route.ts",
-          "src/components/NewsletterForm.tsx",
-          "src/lib/contact.ts",
-          "src/lib/captcha/get-captcha-token.ts",
           "src/lib/captcha/captcha-config.ts",
+          "src/lib/captcha/get-captcha-token.ts",
           "src/lib/captcha/captcha-registry.ts",
-          "src/lib/captcha/providers/hcaptcha-adapter.ts"
+          "src/lib/captcha/providers/hcaptcha-adapter.ts",
+          "src/components/contact/ContactForm.tsx",
+          "src/lib/contact.ts"
         ]
       },
       "diagnosis": {
-        "inferredTypes": [],
+        "inferredTypes": [
+          "error_handling"
+        ],
         "inferredRoute": null,
         "routeExists": null,
         "channels": [
@@ -1292,29 +1264,15 @@
           "vector"
         ],
         "deadTypeFilter": [],
-        "missingFileFacts": [
-          {
-            "file": "src/lib/captcha/captcha-headers.ts",
-            "focusedTypes": [],
-            "broadTypes": [
-              "rendering"
-            ]
-          }
-        ],
+        "missingFileFacts": [],
         "declaredInsufficient": true,
-        "primaryMissClass": "missing-fact",
+        "primaryMissClass": null,
         "secondaryMissClasses": [
-          "over-retrieval",
-          "missing-relation"
+          "over-retrieval"
         ],
-        "perFileMissClass": [
-          {
-            "file": "src/lib/captcha/captcha-headers.ts",
-            "class": "missing-fact"
-          }
-        ],
+        "perFileMissClass": [],
         "forbiddenClaimsInPack": [],
-        "reason": "1 file(s) missing-fact"
+        "reason": "expected evidence complete; warnings: over-retrieval"
       },
       "answerScore": {
         "taskCorrect": null,
@@ -1339,8 +1297,8 @@
         {
           "tool": "memory_repository",
           "args": {},
-          "chars": 438,
-          "tokens": 126,
+          "chars": 331,
+          "tokens": 95,
           "latencyMs": 0,
           "ok": true,
           "returned": [
@@ -1350,8 +1308,8 @@
       ],
       "toolCalls": 1,
       "engine": {
-        "chars": 438,
-        "tokens": 126,
+        "chars": 331,
+        "tokens": 95,
         "latencyMs": 0,
         "error": null
       },
@@ -1361,7 +1319,7 @@
         "tokens": 910,
         "discoveryChars": 3183
       },
-      "contextSavingPercent": 86.2,
+      "contextSavingPercent": 89.6,
       "evidence": {
         "expected": 0,
         "found": 0,
@@ -1412,7 +1370,7 @@
           "args": {},
           "chars": 618,
           "tokens": 177,
-          "latencyMs": 1,
+          "latencyMs": 0,
           "ok": true,
           "returned": []
         }
@@ -1421,7 +1379,7 @@
       "engine": {
         "chars": 618,
         "tokens": 177,
-        "latencyMs": 1,
+        "latencyMs": 0,
         "error": null
       },
       "baseline": {

@@ -87,7 +87,7 @@ export function projectRepository(memoryDb:MemoryDatabase,repository:string):Pro
 
   const vectors=new Map<number,Float32Array>();
   try {
-    for (const item of memoryDb.db.prepare("SELECT rowid, embedding FROM memory_vectors_v2 WHERE repository_id=?").all(row.id) as any[]) {
+    for (const item of memoryDb.db.prepare(`SELECT rowid, embedding FROM ${memoryDb.vectorTableName} WHERE repository_id=?`).all(row.id) as any[]) {
       vectors.set(Number(item.rowid),decode(item.embedding as Buffer));
     }
   } catch { /* vector table unavailable; the UI degrades to a list */ }
@@ -147,7 +147,7 @@ export class ProjectionCache {
     const store=new MemoryStore(this.memoryDb);
     const row=store.getRepository(repository);
     if (!row||!this.memoryDb.vectorStore) return [];
-    const record=this.memoryDb.db.prepare("SELECT embedding FROM memory_vectors_v2 WHERE rowid=?").get(BigInt(memoryId)) as any;
+    const record=this.memoryDb.db.prepare(`SELECT embedding FROM ${this.memoryDb.vectorTableName} WHERE rowid=?`).get(BigInt(memoryId)) as any;
     if (!record) return [];
     return this.hydrate(row.id,decode(record.embedding as Buffer),limit+1).filter((item)=>item.id!==memoryId).slice(0,limit);
   }

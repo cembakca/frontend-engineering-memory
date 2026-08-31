@@ -23,7 +23,9 @@ function sqlResults(memoryDb:MemoryDatabase,query:RetrievalQuery,limit:number):S
   const out:SearchResult[]=[];
   if (query.nextMajor!=null) {
     const rows=memoryDb.db.prepare(`
-      SELECT m.id,repo.name repository,m.memory_type type,m.subject,m.content,MIN(e.file_path) source_file,m.updated_sha commit_sha,
+      SELECT m.id,repo.name repository,m.memory_type type,m.subject,m.content,MIN(e.file_path) source_file,
+             (SELECT symbol FROM memory_evidence es WHERE es.memory_id=m.id AND es.symbol IS NOT NULL ORDER BY es.id LIMIT 1) source_symbol,
+             m.updated_sha commit_sha,
              m.confidence,m.quality_score,repo.last_indexed_sha repository_sha,COUNT(e.id) evidence_count,
              SUM(CASE WHEN e.start_line IS NOT NULL THEN 1 ELSE 0 END) located_evidence_count
       FROM repositories repo JOIN memories m ON m.repository_id=repo.id
@@ -32,7 +34,7 @@ function sqlResults(memoryDb:MemoryDatabase,query:RetrievalQuery,limit:number):S
       GROUP BY m.id ORDER BY repo.name LIMIT ?
     `).all(...(query.repository ? [`${query.nextMajor}%`,query.repository,limit] : [`${query.nextMajor}%`,limit])) as any[];
     out.push(...rows.map((row)=>({id:row.id,repository:row.repository,type:row.type,subject:row.subject,content:row.content,
-      sourceFile:row.source_file,commitSha:row.commit_sha,confidence:row.confidence,qualityScore:row.quality_score,
+      sourceFile:row.source_file,sourceSymbol:row.source_symbol,commitSha:row.commit_sha,confidence:row.confidence,qualityScore:row.quality_score,
       repositorySha:row.repository_sha,evidenceCount:row.evidence_count,locatedEvidenceCount:row.located_evidence_count,score:0,channels:["sql"]})));
   }
   if (query.route || (query.intent==="lookup"&&/\broutes?\b/i.test(query.raw))) {
@@ -74,6 +76,7 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
     const rows=memoryDb.db.prepare(`
       SELECT m.id,repo.name repository,m.memory_type type,m.subject,m.content,
              (SELECT MIN(e.file_path) FROM memory_evidence e WHERE e.memory_id=m.id) source_file,
+             (SELECT symbol FROM memory_evidence es WHERE es.memory_id=m.id AND es.symbol IS NOT NULL ORDER BY es.id LIMIT 1) source_symbol,
              m.updated_sha commit_sha,m.confidence,m.quality_score,repo.last_indexed_sha repository_sha,
              (SELECT COUNT(*) FROM memory_evidence ec WHERE ec.memory_id=m.id) evidence_count,
              (SELECT COUNT(*) FROM memory_evidence el WHERE el.memory_id=m.id AND el.start_line IS NOT NULL) located_evidence_count,
@@ -84,7 +87,7 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
       ORDER BY rank LIMIT ?
     `).all(...params) as any[];
     rows.forEach((row,index)=>add(combined,{id:row.id,repository:row.repository,type:row.type,subject:row.subject,content:row.content,
-      sourceFile:row.source_file,commitSha:row.commit_sha,confidence:row.confidence,qualityScore:row.quality_score,
+      sourceFile:row.source_file,sourceSymbol:row.source_symbol,commitSha:row.commit_sha,confidence:row.confidence,qualityScore:row.quality_score,
       repositorySha:row.repository_sha,evidenceCount:row.evidence_count,locatedEvidenceCount:row.located_evidence_count,
       score:0,channels:["fts"]},index+1));
   }
@@ -98,12 +101,12 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
         const matches=memoryDb.vectorStore.search(vector,{repositoryId,memoryTypes:explicitTypes ? [...explicitTypes] : undefined,limit:limit*3});
         if (matches.length) {
           const placeholders=matches.map(()=>"?").join(",");
-          const rows=memoryDb.db.prepare(`SELECT m.id,repo.name repository,m.memory_type type,m.subject,m.content,MIN(e.file_path) source_file,m.updated_sha commit_sha,m.confidence,m.quality_score,repo.last_indexed_sha repository_sha,COUNT(e.id) evidence_count,SUM(CASE WHEN e.start_line IS NOT NULL THEN 1 ELSE 0 END) located_evidence_count FROM memories m JOIN repositories repo ON repo.id=m.repository_id LEFT JOIN memory_evidence e ON e.memory_id=m.id WHERE m.id IN (${placeholders}) AND m.active=1 GROUP BY m.id`).all(...matches.map((match)=>match.id)) as any[];
+          const rows=memoryDb.db.prepare(`SELECT m.id,repo.name repository,m.memory_type type,m.subject,m.content,MIN(e.file_path) source_file,(SELECT symbol FROM memory_evidence es WHERE es.memory_id=m.id AND es.symbol IS NOT NULL ORDER BY es.id LIMIT 1) source_symbol,m.updated_sha commit_sha,m.confidence,m.quality_score,repo.last_indexed_sha repository_sha,COUNT(e.id) evidence_count,SUM(CASE WHEN e.start_line IS NOT NULL THEN 1 ELSE 0 END) located_evidence_count FROM memories m JOIN repositories repo ON repo.id=m.repository_id LEFT JOIN memory_evidence e ON e.memory_id=m.id WHERE m.id IN (${placeholders}) AND m.active=1 GROUP BY m.id`).all(...matches.map((match)=>match.id)) as any[];
           const byId=new Map(rows.map((row)=>[Number(row.id),row]));
           for (const [index,match] of matches.entries()) {
             const row=byId.get(match.id); if (!row) continue;
             add(combined,{id:row.id,repository:row.repository,type:row.type,subject:row.subject,content:row.content,
-              sourceFile:row.source_file,commitSha:row.commit_sha,confidence:row.confidence,qualityScore:row.quality_score,
+              sourceFile:row.source_file,sourceSymbol:row.source_symbol,commitSha:row.commit_sha,confidence:row.confidence,qualityScore:row.quality_score,
               repositorySha:row.repository_sha,evidenceCount:row.evidence_count,locatedEvidenceCount:row.located_evidence_count,
               score:0,channels:["vector"]},index+1);
           }

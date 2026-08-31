@@ -1,19 +1,19 @@
 {
-  "ranAt": "2026-08-31T12:15:57.540Z",
-  "sourceRun": "/Users/cembakca/Downloads/Archive 3/frontend-engineering-memory/eval-results/rce-002-final.json",
+  "ranAt": "2026-08-31T14:19:12.738Z",
+  "sourceRun": "/tmp/rce-next-eval2-J1eZpH/eval-final-restored.json",
   "targetSha": "6d5978b3b82ea1734868a4b2ccf870f40e389d14",
   "charsPerToken": 3.5,
   "fixedSessionCost": {
     "toolDefinitions": {
       "available": true,
       "tools": 3,
-      "chars": 2241,
-      "tokens": 641,
+      "chars": 2259,
+      "tokens": 646,
       "perTool": [
         {
           "tool": "memory_context",
-          "chars": 1221,
-          "tokens": 349
+          "chars": 1239,
+          "tokens": 354
         },
         {
           "tool": "memory_route",
@@ -37,29 +37,28 @@
     },
     "repositoryPolicy": {
       "available": false,
-      "reason": "memory policy block not found in /private/tmp/claude-501/-Users-cembakca-Downloads-Archive-3-frontend-engineering-memory/c95f7f39-8d91-464d-9c6c-986f1737620c/scratchpad/pilot/AGENTS.md"
+      "reason": "no policy file given"
     },
-    "totalTokens": 740,
+    "totalTokens": 745,
     "complete": false
   },
   "variableCost": {
     "cases": 15,
     "comparableCases": 14,
-    "cleanCases": 11,
+    "cleanCases": 15,
     "nominal": {
-      "total": 58573,
-      "median": 3369,
+      "total": 58546,
+      "median": 3257,
       "negativeCases": [
-        "RCE-E03",
-        "RCE-D07"
+        "RCE-E03"
       ],
       "abstentionCases": [
         "RCE-N07"
       ]
     },
     "effective": {
-      "total": 15208,
-      "median": 755
+      "total": 58546,
+      "median": 3257
     },
     "perCase": [
       {
@@ -73,39 +72,39 @@
       },
       {
         "caseId": "RCE-F01",
-        "clean": false,
+        "clean": true,
         "comparable": true,
-        "engineTokens": 2282,
+        "engineTokens": 2134,
         "baselineTokens": 10035,
-        "nominalSaving": 7753,
-        "effectiveSaving": -2282
+        "nominalSaving": 7901,
+        "effectiveSaving": 7901
       },
       {
         "caseId": "RCE-F03",
         "clean": true,
         "comparable": true,
-        "engineTokens": 2014,
+        "engineTokens": 2126,
         "baselineTokens": 5383,
-        "nominalSaving": 3369,
-        "effectiveSaving": 3369
+        "nominalSaving": 3257,
+        "effectiveSaving": 3257
       },
       {
         "caseId": "RCE-I01",
         "clean": true,
         "comparable": true,
-        "engineTokens": 1532,
+        "engineTokens": 1662,
         "baselineTokens": 5402,
-        "nominalSaving": 3870,
-        "effectiveSaving": 3870
+        "nominalSaving": 3740,
+        "effectiveSaving": 3740
       },
       {
         "caseId": "RCE-D07",
         "clean": true,
         "comparable": true,
-        "engineTokens": 2414,
+        "engineTokens": 1182,
         "baselineTokens": 1313,
-        "nominalSaving": -1101,
-        "effectiveSaving": -1101
+        "nominalSaving": 131,
+        "effectiveSaving": 131
       },
       {
         "caseId": "RCE-E02",
@@ -120,73 +119,73 @@
         "caseId": "RCE-E08",
         "clean": true,
         "comparable": true,
-        "engineTokens": 1508,
+        "engineTokens": 2270,
         "baselineTokens": 2341,
-        "nominalSaving": 833,
-        "effectiveSaving": 833
+        "nominalSaving": 71,
+        "effectiveSaving": 71
       },
       {
         "caseId": "RCE-F02",
         "clean": true,
         "comparable": true,
-        "engineTokens": 1910,
+        "engineTokens": 2070,
         "baselineTokens": 8144,
-        "nominalSaving": 6234,
-        "effectiveSaving": 6234
+        "nominalSaving": 6074,
+        "effectiveSaving": 6074
       },
       {
         "caseId": "RCE-F06",
         "clean": true,
         "comparable": true,
-        "engineTokens": 1210,
+        "engineTokens": 1308,
         "baselineTokens": 1965,
-        "nominalSaving": 755,
-        "effectiveSaving": 755
+        "nominalSaving": 657,
+        "effectiveSaving": 657
       },
       {
         "caseId": "RCE-I02",
         "clean": true,
         "comparable": true,
-        "engineTokens": 2116,
+        "engineTokens": 2200,
         "baselineTokens": 4776,
-        "nominalSaving": 2660,
-        "effectiveSaving": 2660
+        "nominalSaving": 2576,
+        "effectiveSaving": 2576
       },
       {
         "caseId": "RCE-I05",
-        "clean": false,
+        "clean": true,
         "comparable": true,
-        "engineTokens": 579,
+        "engineTokens": 684,
         "baselineTokens": 14330,
-        "nominalSaving": 13751,
-        "effectiveSaving": -579
+        "nominalSaving": 13646,
+        "effectiveSaving": 13646
       },
       {
         "caseId": "RCE-P03",
-        "clean": false,
+        "clean": true,
         "comparable": true,
-        "engineTokens": 2291,
+        "engineTokens": 2284,
         "baselineTokens": 12058,
-        "nominalSaving": 9767,
-        "effectiveSaving": -2291
+        "nominalSaving": 9774,
+        "effectiveSaving": 9774
       },
       {
         "caseId": "RCE-D01",
-        "clean": false,
+        "clean": true,
         "comparable": true,
-        "engineTokens": 2286,
+        "engineTokens": 2280,
         "baselineTokens": 6942,
-        "nominalSaving": 4656,
-        "effectiveSaving": -2286
+        "nominalSaving": 4662,
+        "effectiveSaving": 4662
       },
       {
         "caseId": "RCE-N03",
         "clean": true,
         "comparable": true,
-        "engineTokens": 126,
+        "engineTokens": 95,
         "baselineTokens": 910,
-        "nominalSaving": 784,
-        "effectiveSaving": 784
+        "nominalSaving": 815,
+        "effectiveSaving": 815
       },
       {
         "caseId": "RCE-N07",
@@ -200,7 +199,7 @@
     ]
   },
   "breakEven": {
-    "nominalQuestionsPerSession": 0.22,
+    "nominalQuestionsPerSession": 0.23,
     "note": "Questions a session must ask before the fixed cost is repaid, assuming the pack fully replaces the source read. Not reached when the pack is wrong or empty."
   },
   "clientReported": {

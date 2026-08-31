@@ -58,6 +58,12 @@ function check(id:string,requirement:string,measured:string,threshold:string,ok:
   return {id,requirement,status:ok===null ? "unknown" : ok ? "pass" : "fail",measured,threshold};
 }
 
+function nextMajor(value:unknown):number|null {
+  const raw=String(value ?? "");
+  const match=raw.match(/(?:^|\bnext[-@/])v?(\d{1,2})\./i) ?? raw.match(/^[~^<>=\s]*v?(\d{1,2})\./);
+  return match ? Number(match[1]) : null;
+}
+
 export async function evaluateSecondPilotGate(
   memoryDb:MemoryDatabase,
   options:{candidate?:string;evalRun?:string;economyRun?:string}={},
@@ -65,10 +71,13 @@ export async function evaluateSecondPilotGate(
   const limits=await thresholds();
   const store=new MemoryStore(memoryDb);
   const indexed=store.listRepositories() as any[];
-  const pilot=indexed[0]?.name ?? null;
+  const registry=await loadRegistry();
+  const configuredPilot=registry.repositories[0]?.name ?? null;
+  const pilotRow=indexed.find((item)=>item.name===configuredPilot) ?? indexed[0];
+  const pilot=pilotRow?.name ?? null;
   const checks:GateCheck[]=[];
 
-  const evalRun=await readJson<any>(path.resolve(options.evalRun ?? path.join(projectRoot(),"eval-results/rce-002-run-1.json")));
+  const evalRun=await readJson<any>(path.resolve(options.evalRun ?? path.join(projectRoot(),"eval-results/rce-002-final.json")));
   if (!evalRun?.cases?.length) {
     checks.push(check("retrieval","a context-eval run must exist","no run found","required",null));
   } else {
@@ -87,7 +96,7 @@ export async function evaluateSecondPilotGate(
       `${clean}/${evalRun.cases.length} (${cleanRate.toFixed(2)})`,`>= ${limits.cleanCaseRate}`,cleanRate>=limits.cleanCaseRate));
   }
 
-  const economyRun=await readJson<any>(path.resolve(options.economyRun ?? path.join(projectRoot(),"eval-results/rce-004-economy-1.json")));
+  const economyRun=await readJson<any>(path.resolve(options.economyRun ?? path.join(projectRoot(),"eval-results/rce-004-economy-final.json")));
   if (!economyRun?.variableCost) {
     checks.push(check("economy","a context-economy run must exist","no run found","required",null));
   } else {
@@ -111,16 +120,25 @@ export async function evaluateSecondPilotGate(
     `${audit.failed} failing, ${audit.skipped} skipped`,`<= ${limits.securityAuditFailures}`,audit.failed<=limits.securityAuditFailures));
 
   if (options.candidate) {
-    const registry=await loadRegistry();
     const candidate=registry.repositories.find((item)=>item.name===options.candidate);
-    const pilotRouter=indexed[0]?.router_type ?? null;
+    const candidateRow=indexed.find((item)=>item.name===options.candidate);
+    const pilotRouter=pilotRow?.router_type ?? null;
     if (!candidate) {
       checks.push(check("candidate.registered","the candidate must be in the registry",`${options.candidate} not found`,"registered",false));
-    } else {
-      // Diversity cannot be confirmed before indexing; the gate states what must differ.
+    } else if (!candidateRow) {
       checks.push(check("candidate.diversity","a second pilot is justified only by a router or architecture the first does not exercise",
         `pilot router=${pilotRouter ?? "unknown"}; candidate not yet indexed`,
-        "candidate must differ in router or architecture",null));
+        "candidate must be indexed and differ in router or Next.js major",null));
+    } else {
+      const pilotMajor=nextMajor(pilotRow?.next_version);
+      const candidateMajor=nextMajor(candidateRow.next_version);
+      const signals=[
+        ...(pilotRouter&&candidateRow.router_type&&pilotRouter!==candidateRow.router_type ? [`router ${pilotRouter}->${candidateRow.router_type}`] : []),
+        ...(pilotMajor!=null&&candidateMajor!=null&&pilotMajor!==candidateMajor ? [`Next.js ${pilotMajor}->${candidateMajor}`] : []),
+      ];
+      checks.push(check("candidate.diversity","a second pilot is justified only by a router or architecture the first does not exercise",
+        signals.length ? signals.join(", ") : `same measured profile: router=${pilotRouter ?? "unknown"}, Next.js=${pilotMajor ?? "unknown"}`,
+        "candidate must differ in router or Next.js major",signals.length ? true : null));
     }
   }
 

@@ -59,3 +59,31 @@ test("excludes a custom Next.js distDir from source analysis",async()=>{
     assert.ok(!files.includes("aboutus/server/app/page.js"));
   } finally { await rm(root,{recursive:true,force:true}); }
 });
+
+test("extracts nullable module contracts, registries and guarded HTTP errors",async()=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),"fem-contracts-"));
+  try {
+    await file(root,"src/lib/captcha/captcha-registry.ts",`const adapters = { hcaptcha: hcaptchaAdapter };
+export function resolveAdapter(id: string){ return adapters[id] ?? null; }`);
+    await file(root,"src/app/api/contact/route.ts",`export function readToken(body: unknown){
+  if (typeof body !== "object" || body === null) return null;
+  return body;
+}
+export async function POST(request: Request){
+  const captcha = readToken(await request.json());
+  if (!captcha) return Response.json({ message: "Captcha failed" }, { status: 400 });
+  const response = await fetch("https://example.test/contact", { method: "POST" });
+  return response;
+}`);
+    const registry=await analyzeSourceFile(root,"src/lib/captcha/captcha-registry.ts");
+    assert.ok(registry.some((item)=>item.type==="module_contract"&&item.content.includes("hcaptcha")));
+    assert.ok(registry.some((item)=>item.type==="module_contract"&&item.content.includes("nullish")));
+    const route=await analyzeSourceFile(root,"src/app/api/contact/route.ts");
+    assert.ok(route.some((item)=>item.type==="module_contract"&&item.content.includes("return null")));
+    const error=route.find((item)=>item.type==="error_handling"&&item.content.includes("Captcha failed"));
+    assert.ok(error?.content.includes("when !captcha"));
+    assert.ok(error?.startLine&&error.endLine&&error.sourceSymbol==="POST");
+    const request=route.find((item)=>item.type==="api_dependency"&&item.content.includes("example.test/contact"));
+    assert.equal(request?.sourceSymbol,"POST","local response variables must not replace their owning handler symbol");
+  } finally { await rm(root,{recursive:true,force:true}); }
+});

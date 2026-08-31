@@ -1,14 +1,19 @@
 import type { EmbeddingProvider } from "./providers.js";
+import { resolveEmbeddingProfile, type EmbeddingProfile } from "./embedding-profile.js";
 
 export class TransformersEmbeddingProvider implements EmbeddingProvider {
-  readonly dimension=384;
+  readonly dimension:number;
   private extractorPromise:Promise<any>|null=null;
 
-  constructor(private readonly model=process.env.MEMORY_EMBEDDING_MODEL ?? "Xenova/multilingual-e5-small") {}
+  constructor(readonly profile:EmbeddingProfile=resolveEmbeddingProfile()) {
+    this.dimension=profile.dimension;
+  }
 
   private async extractor():Promise<any> {
     if (!this.extractorPromise) {
-      this.extractorPromise=import("@huggingface/transformers").then(({pipeline})=>pipeline("feature-extraction",this.model));
+      this.extractorPromise=import("@huggingface/transformers").then(({pipeline})=>pipeline(
+        "feature-extraction",this.profile.model,{revision:this.profile.revision,dtype:this.profile.dtype},
+      ));
     }
     return this.extractorPromise;
   }
@@ -20,9 +25,11 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
     return (output.tolist() as number[][]).map((row)=>Float32Array.from(row));
   }
 
-  embedPassages(texts:string[]):Promise<Float32Array[]> { return this.embed(texts.map((text)=>`passage: ${text}`)); }
+  embedPassages(texts:string[]):Promise<Float32Array[]> {
+    return this.embed(texts.map((text)=>`${this.profile.passagePrefix}${text}`));
+  }
   async embedQuery(text:string):Promise<Float32Array> {
-    const [vector]=await this.embed([`query: ${text}`]);
+    const [vector]=await this.embed([`${this.profile.queryPrefix}${text}`]);
     if (!vector) throw new Error("Embedding model returned no query vector");
     return vector;
   }

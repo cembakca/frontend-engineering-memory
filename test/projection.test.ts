@@ -9,8 +9,8 @@ import { configureTestNativeBinding } from "./native-binding.js";
 
 await configureTestNativeBinding();
 
-/** Three tight clusters in 384 dimensions; a correct projection must keep them apart. */
-function clusteredVector(cluster:number,jitter:number,dimension=384):Float32Array {
+/** Three tight clusters; a correct projection must keep them apart at any configured dimension. */
+function clusteredVector(cluster:number,jitter:number,dimension:number):Float32Array {
   const vector=new Float32Array(dimension);
   for (let i=0;i<dimension;i+=1) vector[i]=Math.sin((i+1)*(cluster+1))*0.01;
   vector[cluster*40]=1+jitter;
@@ -36,7 +36,7 @@ async function withDatabase<T>(run:(memoryDb:MemoryDatabase)=>Promise<T>|T):Prom
         const id=Number(row.lastInsertRowid);
         memoryDb.db.prepare("INSERT INTO memory_evidence(memory_id,file_path,start_line,end_line,commit_sha) VALUES(?,?,?,?,?)")
           .run(id,`src/cluster-${cluster}.ts`,member+1,member+1,"a".repeat(40));
-        memoryDb.vectorStore?.set(id,clusteredVector(cluster,member*0.01),{repositoryId:1,memoryType:`type_${cluster}`});
+        memoryDb.vectorStore?.set(id,clusteredVector(cluster,member*0.01,memoryDb.vectorDimension),{repositoryId:1,memoryType:`type_${cluster}`});
       }
     }
     return await run(memoryDb);
@@ -52,7 +52,7 @@ test("projects stored vectors into bounded coordinates and reports what it lost"
     const projection=projectRepository(memoryDb,"fixture");
     assert.equal(projection.points.length,12);
     assert.equal(projection.withoutVector,0);
-    assert.equal(projection.dimension,384);
+    assert.equal(projection.dimension,memoryDb.vectorDimension);
     assert.equal(projection.explained.length,3,"the page states how lossy the picture is");
     assert.ok(projection.explained[0]! >= projection.explained[1]!,"components come out ordered");
     for (const point of projection.points) {

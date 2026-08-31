@@ -41,22 +41,45 @@ function tableBlob(memoryDb:MemoryDatabase,table:string):string {
   return JSON.stringify(memoryDb.db.prepare(`SELECT * FROM ${table}`).all());
 }
 
+interface EnvValue { key:string; value:string }
+
 /** Values assigned in the repository's env files. These must never appear in the database. */
-async function envValues(repoPath:string):Promise<string[]> {
-  const values=new Set<string>();
+async function envValues(repoPath:string):Promise<EnvValue[]> {
+  const values=new Map<string,EnvValue>();
   let entries:string[];
   try { entries=await readdir(repoPath); } catch { return []; }
   for (const entry of entries.filter((name)=>name.startsWith(".env"))) {
     let content:string;
     try { content=await readFile(path.join(repoPath,entry),"utf8"); } catch { continue; }
     for (const line of content.split(/\r?\n/)) {
-      const match=line.match(/^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(.+?)\s*$/);
-      const raw=match?.[1]?.replace(/^["']|["']$/g,"").trim();
+      const match=line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$/);
+      const raw=match?.[2]?.replace(/^["']|["']$/g,"").trim();
       // Short values collide with ordinary words; they are not usable as a leak signal.
-      if (raw&&raw.length>=6) values.add(raw);
+      if (match&&raw&&raw.length>=6) values.set(`${match[1]}\0${raw}`,{key:match[1]!,value:raw});
     }
   }
-  return [...values];
+  return [...values.values()];
+}
+
+function valueNeedsSubstringCheck(item:EnvValue):boolean {
+  if (/(?:SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE|CREDENTIAL|API_?KEY|AUTH)/i.test(item.key)) return true;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(item.value)) return true;
+  const classes=[/[a-z]/i.test(item.value),/[0-9]/.test(item.value),/[^a-z0-9]/i.test(item.value)].filter(Boolean).length;
+  return item.value.length>=16&&classes>=3;
+}
+
+function tableContainsEnvValue(memoryDb:MemoryDatabase,table:string,item:EnvValue):boolean {
+  const rows=memoryDb.db.prepare(`SELECT * FROM ${table}`).all() as Array<Record<string,unknown>>;
+  for (const row of rows) for (const cell of Object.values(row)) {
+    if (typeof cell!=="string") continue;
+    // Exact scalar equality catches even low-entropy values without confusing a
+    // repository path named "production" with an env value of "production".
+    if (cell===item.value) return true;
+    // Substring matching is reserved for secrets/high-entropy values and URLs;
+    // these commonly appear inside prose or JSON when a leak really occurs.
+    if (valueNeedsSubstringCheck(item)&&cell.includes(item.value)) return true;
+  }
+  return false;
 }
 
 export async function runSecurityAudit(memoryDb:MemoryDatabase,options:{repository?:string}={}):Promise<SecurityAuditReport> {
@@ -74,11 +97,8 @@ export async function runSecurityAudit(memoryDb:MemoryDatabase,options:{reposito
     const values=await envValues(repoPath);
     if (!values.length) continue;
     envChecked+=values.length;
-    for (const table of tables) {
-      const blob=tableBlob(memoryDb,table);
-      for (const value of values) {
-        if (blob.includes(value)) envFindings.push(`${table} contains an env value from ${name}`);
-      }
+    for (const table of tables) for (const item of values) {
+      if (tableContainsEnvValue(memoryDb,table,item)) envFindings.push(`${table} contains ${item.key} value from ${name}`);
     }
   }
   invariants.push({

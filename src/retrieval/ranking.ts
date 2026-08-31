@@ -24,10 +24,10 @@ function taskFit(result:SearchResult,intent:TaskIntent):number {
   if (channels.includes("graph")) return clamp((["explain-flow","impact","debug","change-review"].includes(intent) ? 1 : .75)+(result.queryTypeBoost ?? 0));
   const preferred:Partial<Record<TaskIntent,MemoryType[]>>={
     lookup:["repository_profile","rendering","configuration","dependency","api_dependency","build","seo"],
-    "explain-flow":["api_dependency","data_fetching","cache","rendering","configuration"],
-    impact:["configuration","dependency","api_dependency","rendering","shared_package","design_system"],
-    debug:["error_handling","api_dependency","configuration","security","cache","rendering"],
-    "implementation-plan":["business_rule","api_dependency","rendering","cache","build","design_system"],
+    "explain-flow":["api_dependency","data_fetching","module_contract","cache","rendering","configuration"],
+    impact:["module_contract","configuration","dependency","api_dependency","rendering","shared_package","design_system"],
+    debug:["error_handling","module_contract","api_dependency","configuration","security","cache","rendering"],
+    "implementation-plan":["module_contract","business_rule","api_dependency","rendering","cache","build","design_system"],
     "change-review":["technical_debt","rendering","api_dependency","configuration","build"],
     verify:["build","error_handling","technical_debt"],
     unknown:[],

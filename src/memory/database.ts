@@ -6,14 +6,20 @@ import { dbPath, embeddingsEnabled } from "../config.js";
 import { SCHEMA_SQL } from "./schema.js";
 import type { VectorStore } from "./providers.js";
 import { SqliteVecStore } from "./vector-store.js";
+import { resolveEmbeddingProfile, type EmbeddingProfile } from "./embedding-profile.js";
 
 export class MemoryDatabase {
   readonly db: Database.Database;
   readonly vectorEnabled: boolean;
-  readonly vectorDimension = 384;
+  readonly embeddingProfile:EmbeddingProfile;
+  readonly vectorDimension:number;
+  readonly vectorTableName:string;
   readonly vectorStore:VectorStore|null;
 
   constructor(file = dbPath()) {
+    this.embeddingProfile=resolveEmbeddingProfile();
+    this.vectorDimension=this.embeddingProfile.dimension;
+    this.vectorTableName=this.embeddingProfile.vectorTable;
     mkdirSync(path.dirname(file), { recursive: true });
     const nativeBinding = process.env.MEMORY_SQLITE_NATIVE_BINDING;
     this.db = new Database(file,nativeBinding ? { nativeBinding } : undefined);
@@ -28,7 +34,9 @@ export class MemoryDatabase {
         const vectorExtension = process.env.MEMORY_SQLITE_VEC_EXTENSION;
         if (vectorExtension) this.db.loadExtension(vectorExtension);
         else sqliteVec.load(this.db);
-        vectorStore=new SqliteVecStore(this.db,this.vectorDimension);
+        vectorStore=new SqliteVecStore(this.db,this.vectorDimension,{
+          tableName:this.vectorTableName,legacyTable:this.embeddingProfile.legacyVectorTable,
+        });
         vectorEnabled = true;
       } catch (error) {
         console.warn(`[memory] sqlite-vec unavailable; semantic vector search disabled: ${(error as Error).message}`);
