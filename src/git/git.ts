@@ -23,6 +23,24 @@ export async function getWorkingTreeStatus(repoPath: string): Promise<string> {
   return git(repoPath,["status","--porcelain"]);
 }
 
+/** Committer timestamp in epoch seconds, or null when the commit is not in this clone. */
+export async function getCommitTimestamp(repoPath: string, sha: string): Promise<number | null> {
+  try {
+    const value = await git(repoPath,["show","-s","--format=%ct",sha]);
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
+/** Commits reachable from `to` but not from `from`; null when either side is unknown here. */
+export async function countCommitsBetween(repoPath: string, fromSha: string, toSha: string): Promise<number | null> {
+  try {
+    const value = await git(repoPath,["rev-list","--count",`${fromSha}..${toSha}`]);
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
 export async function isAncestor(repoPath: string, ancestorSha: string, descendantSha: string): Promise<boolean> {
   try {
     await git(repoPath,["merge-base","--is-ancestor",ancestorSha,descendantSha]);

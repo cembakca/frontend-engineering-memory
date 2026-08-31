@@ -3,6 +3,8 @@ import { URL } from "node:url";
 import { getRepositoryConfig } from "./config.js";
 import { MemoryDatabase } from "./memory/database.js";
 import { MemoryStore } from "./memory/store.js";
+import { AnswerFeedback } from "./telemetry/answer-feedback.js";
+import { RetrievalTelemetry } from "./telemetry/retrieval-telemetry.js";
 import { hybridSearch } from "./retrieval/search.js";
 import { fullIndex, incrementalSync } from "./sync/sync.js";
 import { startReconciliationScheduler } from "./sync/reconcile.js";
@@ -29,6 +31,8 @@ function enqueue<T>(job: () => Promise<T>): Promise<T> {
 
 export function startServer(memoryDb = new MemoryDatabase()): http.Server {
   const store = new MemoryStore(memoryDb);
+  const feedback = new AnswerFeedback(memoryDb);
+  const telemetry = new RetrievalTelemetry(memoryDb);
   const host = process.env.MEMORY_HOST ?? "127.0.0.1";
   const port = Number(process.env.MEMORY_PORT ?? 4317);
 
@@ -38,6 +42,16 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
       if (req.method === "GET" && url.pathname === "/health") return json(res,200,{ok:true,vectorEnabled:memoryDb.vectorEnabled});
       if (req.method === "GET" && url.pathname === "/repositories") return json(res,200,store.listRepositories());
       if (req.method === "GET" && url.pathname === "/quality") return json(res,200,store.qualityReport(url.searchParams.get("repo") ?? undefined));
+      if (req.method === "GET" && url.pathname === "/telemetry") return json(res,200,telemetry.report(url.searchParams.get("repo") ?? undefined));
+      if (req.method === "GET" && url.pathname === "/feedback") {
+        const repo=url.searchParams.get("repo") ?? undefined;
+        return json(res,200,{summary:feedback.summary(repo),backlog:feedback.backlog(repo)});
+      }
+      if (req.method === "POST" && url.pathname === "/feedback") {
+        const payload=await body(req);
+        try { return json(res,201,feedback.record({...payload,reporter:payload.reporter ?? "http"})); }
+        catch (error) { return json(res,400,{error:(error as Error).message}); }
+      }
       if (req.method === "GET" && url.pathname === "/search") {
         const q=url.searchParams.get("q") ?? "";
         if (!q) return json(res,400,{error:"q is required"});

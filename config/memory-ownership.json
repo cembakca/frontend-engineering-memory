@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "owners": {
+    "agent-native": {
+      "owns": ["personal-preference", "episodic-task-state"],
+      "mustNotStore": ["repository-fact", "semantic-relation", "human-decision"],
+      "rule": "May remember a repository/tool pointer, never copy repository truth into personal memory."
+    },
+    "repository-instructions": {
+      "owns": ["workflow-policy"],
+      "mustNotStore": ["repository-fact", "semantic-relation", "human-decision", "episodic-task-state"],
+      "rule": "AGENTS.md and CLAUDE.md explain how to retrieve truth; they do not duplicate the truth."
+    },
+    "context-engine": {
+      "owns": ["repository-fact", "semantic-relation", "human-decision"],
+      "mustNotStore": ["personal-preference", "episodic-task-state", "workflow-policy"],
+      "rule": "Persist only source-backed facts/relations or explicitly human-approved decisions."
+    }
+  },
+  "deduplication": [
+    "One class has exactly one owner.",
+    "Native memory stores pointers, not repository payloads.",
+    "Repository instructions store retrieval policy, not copied facts.",
+    "Why/rationale enters the context engine only through approved decision provenance."
+  ]
+}

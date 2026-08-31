@@ -10,6 +10,7 @@ import { getHeadSha } from "../src/git/git.js";
 import { MemoryDatabase } from "../src/memory/database.js";
 import { MemoryStore } from "../src/memory/store.js";
 import { hybridSearch } from "../src/retrieval/search.js";
+import { TemporalContextEngine } from "../src/retrieval/temporal.js";
 import { fullIndex, incrementalSync } from "../src/sync/sync.js";
 import type { RepositoryConfig } from "../src/types.js";
 import { configureTestNativeBinding } from "./native-binding.js";
@@ -57,6 +58,10 @@ test("incremental sync deactivates old memory versions and preserves their evide
     assert.deepEqual(versions[0],{active:0,created_sha:first,removed_sha:second,file_path:"src/app/page.tsx"});
     assert.deepEqual(versions[1],{active:1,created_sha:second,removed_sha:null,file_path:"src/app/page.tsx"});
     assert.equal((memoryDb.db.prepare("SELECT last_indexed_sha sha FROM repositories WHERE name='fixture'").get() as {sha:string}).sha,second);
+    const store=new MemoryStore(memoryDb);
+    assert.deepEqual(store.listRepositorySnapshots("fixture").map((item)=>item.sha),[second,first]);
+    const diff=new TemporalContextEngine(store).behaviorDiff("fixture",first,second);
+    assert.ok(diff.routeChanges.some((item:any)=>item.route==="/"&&item.fields?.rendering?.to==="dynamic-ssr"));
   } finally {
     memoryDb.close();
     await rm(root,{recursive:true,force:true});
@@ -76,7 +81,7 @@ test("full index rolls every database mutation back when persistence fails",asyn
   };
   try {
     await assert.rejects(()=>fullIndex(config,memoryDb),/injected persistence failure/);
-    for (const table of ["repositories","routes","memories","index_runs"]) {
+    for (const table of ["repositories","routes","memories","index_runs","repository_snapshots"]) {
       const count=(memoryDb.db.prepare(`SELECT count(*) count FROM ${table}`).get() as {count:number}).count;
       assert.equal(count,0,`${table} must roll back`);
     }
@@ -121,6 +126,8 @@ test("migrates existing memory databases without discarding rows",async()=>{
     const tables=memoryDb.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{name:string}>;
     assert.ok(tables.some((table)=>table.name==="route_dependencies"));
     assert.ok(tables.some((table)=>table.name==="index_run_changes"));
+    assert.ok(tables.some((table)=>table.name==="repository_snapshots"));
+    assert.ok(tables.some((table)=>table.name==="repository_decisions"));
     assert.equal((memoryDb.db.prepare("SELECT content FROM memories WHERE subject='legacy'").get() as {content:string}).content,"kept");
   } finally {
     memoryDb.close();

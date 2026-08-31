@@ -4,3 +4,4 @@ export { analyzePackageDependencies, analyzeRepositoryDependencies } from "./dep
 export { analyzeSourceFile, listAnalyzableSourceFiles } from "./source-memory.js";
 export { repositoryProfileMemory, routeMemory } from "./derived-memory.js";
 export { analyzeProjectFile, dependencyMemories, listProjectAnalysisFiles } from "./project-memory.js";
+export { canonicalizeMemories } from "./canonicalize.js";

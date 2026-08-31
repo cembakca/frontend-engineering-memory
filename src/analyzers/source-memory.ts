@@ -40,19 +40,9 @@ export async function analyzeSourceFile(repoPath: string, sourceFile: string): P
     });
   }
 
-  for (const signal of facts.internalPackages) {
-    const pkg=signal.value;
-    push(out, {
-      type: pkg.includes("component") || pkg.includes("token") ? "design_system" : "shared_package",
-      subject: pkg,
-      content: `${sourceFile} imports internal package ${pkg}.`,
-      confidence: "verified",
-      sourceFile,
-      startLine:signal.line,
-      endLine:signal.endLine,
-      sourceSymbol:signal.symbol,
-    });
-  }
+  // RCE-006 R2: an internal-package import restates the dependencies row it already
+  // produced. The structured row is the canonical record; a second memory copy only
+  // spends a retrieval slot in the returned window.
 
   if (/\b(?:cookies|headers)\s*\(/.test(content)) {
     const functions = ["cookies", "headers"].filter((fn) => new RegExp(`\\b${fn}\\s*\\(`).test(content));
@@ -198,12 +188,11 @@ export async function analyzeSourceFile(repoPath: string, sourceFile: string): P
   for (const signal of facts.businessRules) {
     push(out,{type:"business_rule",subject:`${sourceFile}:${signal.line}`,content:`Explicit source annotation BUSINESS_RULE: ${signal.value}`,confidence:"verified",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line,endLine:signal.endLine});
   }
-  if (/(^|\/)(?:app|pages)\/(?:.+\/)?(?:page|route)\.(?:ts|tsx|js|jsx)$|(^|\/)pages\/(?!_)[^/]+\.(?:ts|tsx|js|jsx)$/.test(sourceFile)) {
-    push(out,{type:"business_capability",subject:sourceFile,content:`${sourceFile} exposes a user-facing page or route-handler capability; no unverified business purpose is inferred.`,confidence:"verified",sourceFile,startLine:1});
-  }
-  if (/(^|\/)next\.config\.(?:ts|js|mjs|cjs)$/.test(sourceFile)) {
-    push(out,{type:"build",subject:sourceFile,content:`${sourceFile} configures the Next.js build/runtime.`,confidence:"verified",sourceFile,startLine:1});
-  }
+  // RCE-006 R1: "this file exposes a capability" is derivable from the path and is
+  // already stored, with far more detail, in the routes table. A capability is only
+  // created from a human-approved source (RCE-009).
+  // RCE-006 R1: naming next.config.ts as "the build config" states nothing the file
+  // contains; its actual settings are recorded by the project analyzer.
 
   for (const candidate of out) {
     if (!candidate.startLine || (candidate.sourceSymbol && candidate.endLine)) continue;

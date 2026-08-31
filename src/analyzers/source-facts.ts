@@ -11,7 +11,19 @@ export interface DataSourceSignal extends LocatedSignal {
   kind: "fetch" | "axios" | "ky" | "graphql" | "api-client";
 }
 
+/** `redirect()` / `notFound()` are control flow, not rendering: a page that redirects never renders. */
+export interface ControlFlowSignal {
+  kind:"redirect"|"permanent-redirect"|"not-found";
+  target:string|null;
+  /** False when the call runs on every request, which means the page never renders its own body. */
+  conditional:boolean;
+  line:number;
+}
+
 export interface SourceFacts {
+  controlFlow: ControlFlowSignal[];
+  /** Route segment config exports; authoritative over any signal found in a helper module. */
+  segmentConfig: Record<string,string>;
   imports: LocatedSignal[];
   internalPackages: LocatedSignal[];
   envKeys: LocatedSignal[];
@@ -89,13 +101,56 @@ function nodeAtPosition(source:ts.SourceFile,position:number):ts.Node {
 export function extractSourceFacts(sourceFile: string, content: string): SourceFacts {
   const source=ts.createSourceFile(sourceFile,content,ts.ScriptTarget.Latest,true,sourceFile.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const facts: SourceFacts={
+    controlFlow:[],segmentConfig:{},
     imports:[],internalPackages:[],envKeys:[],dataSources:[],cacheBehavior:[],clientBoundary:false,
     stateLibraries:[],securitySignals:[],performanceSignals:[],businessRules:[],
   };
   const statePattern=/(^|\/)(redux|zustand|jotai|mobx|recoil)(\/|$)|@reduxjs\/toolkit/;
 
+  const CONTROL_FLOW:Record<string,ControlFlowSignal["kind"]>={
+    redirect:"redirect",permanentRedirect:"permanent-redirect",notFound:"not-found",
+  };
+  /** True when the call sits under a branch, so the page can still render its own body. */
+  const underBranch=(node:ts.Node):boolean=>{
+    let current:ts.Node|undefined=node.parent;
+    while (current&&!ts.isFunctionDeclaration(current)&&!ts.isArrowFunction(current)&&!ts.isFunctionExpression(current)) {
+      if (ts.isIfStatement(current)||ts.isConditionalExpression(current)||ts.isSwitchStatement(current)||ts.isCatchClause(current)) return true;
+      if (ts.isBinaryExpression(current)&&
+        (current.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken||current.operatorToken.kind===ts.SyntaxKind.BarBarToken||
+         current.operatorToken.kind===ts.SyntaxKind.QuestionQuestionToken)) return true;
+      current=current.parent;
+    }
+    return false;
+  };
+
   const visit=(node:ts.Node):void=>{
     if (ts.isExpressionStatement(node) && ts.isStringLiteral(node.expression) && node.expression.text==="use client") facts.clientBoundary=true;
+
+    if (ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&CONTROL_FLOW[node.expression.text]) {
+      const first=node.arguments[0];
+      facts.controlFlow.push({
+        kind:CONTROL_FLOW[node.expression.text]!,
+        target:first&&ts.isStringLiteralLike(first) ? first.text : null,
+        conditional:underBranch(node),
+        line:source.getLineAndCharacterOfPosition(node.getStart(source)).line+1,
+      });
+    }
+
+    if (ts.isVariableStatement(node)
+      &&(node.modifiers ?? []).some((item)=>item.kind===ts.SyntaxKind.ExportKeyword)
+      &&node.parent?.kind===ts.SyntaxKind.SourceFile) {
+      for (const declaration of node.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name)||!declaration.initializer) continue;
+        const name=declaration.name.text;
+        if (!["dynamic","revalidate","fetchCache","runtime","dynamicParams","preferredRegion"].includes(name)) continue;
+        const initializer=declaration.initializer;
+        const value=ts.isStringLiteralLike(initializer) ? initializer.text
+          : ts.isNumericLiteral(initializer) ? initializer.text
+          : initializer.kind===ts.SyntaxKind.TrueKeyword ? "true"
+          : initializer.kind===ts.SyntaxKind.FalseKeyword ? "false" : null;
+        if (value!=null) facts.segmentConfig[name]=value;
+      }
+    }
 
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
       const value=node.moduleSpecifier.text;
@@ -106,7 +161,9 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
         pushUnique(facts.internalPackages,{...signal,value:packageName},(item)=>item.value);
       }
       if (statePattern.test(value)) pushUnique(facts.stateLibraries,signal,(item)=>item.value);
-      if (/^(next\/dynamic|react)$/.test(value)) pushUnique(facts.performanceSignals,located(source,node,`performance import ${value}`));
+      // RCE-006 R3: `react` is imported by every client component, so it is a baseline
+      // property, not an observation. Only the code-splitting import is a signal.
+      if (value==="next/dynamic") pushUnique(facts.performanceSignals,located(source,node,`dynamic import ${value}`));
       if (/(jose|jsonwebtoken|dompurify|sanitize-html)/.test(value)) pushUnique(facts.securitySignals,located(source,node,`security package ${value}`));
     }
 

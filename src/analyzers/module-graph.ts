@@ -76,6 +76,16 @@ export class LocalModuleGraph {
     return [...resolved].sort();
   }
 
+  /** Resolve one module specifier to a repo-relative source file, or null when it leaves the repository. */
+  resolve(fromRelativeFile: string, specifier: string): string | null {
+    const absolute = path.join(this.repoPath,fromRelativeFile);
+    const match = ts.resolveModuleName(specifier,absolute,this.options,ts.sys).resolvedModule;
+    if (!match) return null;
+    const target = path.resolve(match.resolvedFileName);
+    if (!isInside(this.repoPath,target) || target.endsWith(".d.ts") || !SOURCE_EXTENSIONS.has(path.extname(target))) return null;
+    return toRelative(this.repoPath,target);
+  }
+
   async reachableFrom(entryFiles: string[]): Promise<string[]> {
     const visited = new Set<string>();
     const queue = [...entryFiles];

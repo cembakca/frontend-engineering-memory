@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS routes (
   metadata_mode TEXT NOT NULL DEFAULT 'unknown',
   evidence_json TEXT NOT NULL DEFAULT '[]',
   behavior_files_json TEXT NOT NULL DEFAULT '[]',
+  segment_config_json TEXT NOT NULL DEFAULT '{}',
+  control_flow_json TEXT NOT NULL DEFAULT '[]',
+  rendering_basis TEXT NOT NULL DEFAULT 'observed',
   server_component INTEGER,
   client_boundaries_json TEXT NOT NULL DEFAULT '[]',
   data_sources_json TEXT NOT NULL DEFAULT '[]',
@@ -154,4 +157,82 @@ CREATE TABLE IF NOT EXISTS index_run_changes (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_run_changes_run ON index_run_changes(run_id, entity_type, operation);
+
+CREATE TABLE IF NOT EXISTS repository_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+  sha TEXT NOT NULL,
+  profile_json TEXT NOT NULL,
+  routes_json TEXT NOT NULL,
+  dependencies_json TEXT NOT NULL,
+  memories_json TEXT NOT NULL,
+  graph_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(repository_id, sha)
+);
+CREATE INDEX IF NOT EXISTS idx_repository_snapshots_repo_sha ON repository_snapshots(repository_id, sha);
+
+CREATE TABLE IF NOT EXISTS repository_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+  decision_key TEXT NOT NULL,
+  title TEXT NOT NULL,
+  rationale TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('proposed','accepted','rejected','superseded')),
+  source_kind TEXT NOT NULL CHECK(source_kind IN ('adr','pr','issue','human')),
+  source_ref TEXT NOT NULL,
+  source_sha TEXT,
+  approved_by TEXT NOT NULL,
+  approved_at TEXT NOT NULL,
+  supersedes_decision_id INTEGER REFERENCES repository_decisions(id),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(repository_id, decision_key, source_ref)
+);
+CREATE INDEX IF NOT EXISTS idx_repository_decisions_repo_key ON repository_decisions(repository_id, decision_key, status);
+
+-- RCE-024. Retrieval telemetry never stores fact content, evidence excerpts,
+-- source code or configuration values. Only identifiers, counts and timings.
+CREATE TABLE IF NOT EXISTS retrieval_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  repository_id INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
+  tool TEXT NOT NULL,
+  intent TEXT,
+  pack_kind TEXT,
+  snapshot_sha TEXT,
+  query_hash TEXT NOT NULL,
+  query_shape_json TEXT NOT NULL,
+  query_text TEXT,
+  channels_json TEXT NOT NULL DEFAULT '[]',
+  second_round INTEGER NOT NULL DEFAULT 0,
+  result_ids_json TEXT NOT NULL DEFAULT '[]',
+  result_count INTEGER NOT NULL DEFAULT 0,
+  payload_chars INTEGER NOT NULL DEFAULT 0,
+  estimated_tokens INTEGER NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  fallback TEXT NOT NULL DEFAULT 'none',
+  miss_class TEXT,
+  gaps_json TEXT NOT NULL DEFAULT '[]',
+  error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_retrieval_events_repo_time ON retrieval_events(repository_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_events_miss ON retrieval_events(miss_class, created_at);
+
+-- RCE-025. A feedback signal is worth keeping only if it becomes an evaluation
+-- case, so every row carries the state that moves it through the backlog.
+CREATE TABLE IF NOT EXISTS answer_feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  repository_id INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
+  retrieval_event_id INTEGER REFERENCES retrieval_events(id) ON DELETE SET NULL,
+  query_hash TEXT NOT NULL,
+  signal TEXT NOT NULL CHECK(signal IN ('sufficient','source-needed','wrong','stale')),
+  reporter TEXT NOT NULL DEFAULT 'unknown',
+  note TEXT,
+  snapshot_sha TEXT,
+  backlog_state TEXT NOT NULL DEFAULT 'new' CHECK(backlog_state IN ('new','triaged','case-created','dismissed')),
+  case_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_answer_feedback_repo_state ON answer_feedback(repository_id, backlog_state, created_at);
+CREATE INDEX IF NOT EXISTS idx_answer_feedback_query ON answer_feedback(query_hash, signal);
 `;

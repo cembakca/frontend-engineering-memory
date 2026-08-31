@@ -2,6 +2,8 @@ import path from "node:path";
 import { readTextIfSmall, sha256 } from "../utils/fs.js";
 import type { DependencyCandidate, MemoryCandidate, PreparedMemoryCandidate, RepositoryConfig, RepositoryProfile, RouteRecord } from "../types.js";
 import type { MemoryDatabase } from "./database.js";
+import type { GraphEdge } from "../analyzers/symbol-graph.js";
+import { validateDecision, type DecisionInput } from "./decisions.js";
 
 export class MemoryStore {
   constructor(private readonly memoryDb: MemoryDatabase) {}
@@ -76,6 +78,62 @@ export class MemoryStore {
     `).all(...(sinceSha ? [repositoryName,sinceSha] : [repositoryName]));
   }
 
+  captureRepositorySnapshot(repositoryId:number,repositoryName:string,sha:string,profile:Record<string,unknown>,graph:GraphEdge[]):void {
+    const parse=(value:string|null|undefined,fallback:any)=>{ try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
+    const routes=(this.db.prepare("SELECT * FROM routes WHERE repository_id=? AND active=1 ORDER BY route,source_file").all(repositoryId) as any[]).map((row)=>({
+      route:row.route,routeType:row.route_type,sourceFile:row.source_file,rendering:row.rendering_mode,
+      authRequired:row.auth_required==null ? null : Boolean(row.auth_required),middlewareMatched:row.middleware_matched==null ? null : Boolean(row.middleware_matched),
+      cache:parse(row.cache_behavior_json,[]),dataSources:parse(row.data_sources_json,[]),backendDependencies:parse(row.backend_dependencies_json,[]),
+      seoType:row.seo_type,metadataSource:row.metadata_source,
+    }));
+    const dependencies=(this.db.prepare("SELECT dependency_type,name,source_file,config_key FROM dependencies WHERE repository_id=? AND active=1 ORDER BY dependency_type,name,source_file").all(repositoryId) as any[])
+      .map((row)=>({type:row.dependency_type,name:row.name,sourceFile:row.source_file,configKey:row.config_key}));
+    const memories=(this.db.prepare("SELECT id,memory_type,subject,content,confidence FROM memories WHERE repository_id=? AND active=1 ORDER BY memory_type,subject,id").all(repositoryId) as any[]);
+    const evidence=this.memoryEvidence(memories.map((item)=>item.id));
+    const snapshotMemories=memories.map((item)=>({type:item.memory_type,subject:item.subject,content:item.content,confidence:item.confidence,
+      evidence:[...new Set((evidence.get(item.id) ?? []).map((row:any)=>row.file_path as string))]}));
+    this.db.prepare(`INSERT OR IGNORE INTO repository_snapshots(repository_id,sha,profile_json,routes_json,dependencies_json,memories_json,graph_json)
+      VALUES(?,?,?,?,?,?,?)`).run(repositoryId,sha,JSON.stringify(profile),JSON.stringify(routes),JSON.stringify(dependencies),JSON.stringify(snapshotMemories),JSON.stringify(graph));
+  }
+
+  getRepositorySnapshot(repositoryName:string,sha:string):any|undefined {
+    const row=this.db.prepare(`SELECT repo.name repository,rs.sha,rs.profile_json,rs.routes_json,rs.dependencies_json,rs.memories_json,rs.graph_json,rs.created_at
+      FROM repository_snapshots rs JOIN repositories repo ON repo.id=rs.repository_id WHERE repo.name=? AND rs.sha=?`).get(repositoryName,sha) as any;
+    if (!row) return undefined;
+    return {repository:row.repository,sha:row.sha,profile:JSON.parse(row.profile_json),routes:JSON.parse(row.routes_json),
+      dependencies:JSON.parse(row.dependencies_json),memories:JSON.parse(row.memories_json),graph:JSON.parse(row.graph_json),createdAt:row.created_at};
+  }
+
+  listRepositorySnapshots(repositoryName:string):Array<{sha:string;createdAt:string}> {
+    return this.db.prepare(`SELECT rs.sha,rs.created_at createdAt FROM repository_snapshots rs JOIN repositories repo ON repo.id=rs.repository_id
+      WHERE repo.name=? ORDER BY rs.id DESC`).all(repositoryName) as Array<{sha:string;createdAt:string}>;
+  }
+
+  addRepositoryDecision(repositoryName:string,value:DecisionInput):number {
+    const input=validateDecision(value);
+    const repository=this.getRepository(repositoryName) as {id:number}|undefined;
+    if (!repository) throw new Error(`Repository not found: ${repositoryName}`);
+    const superseded=input.supersedesKey ? this.db.prepare(`SELECT id FROM repository_decisions WHERE repository_id=? AND decision_key=?
+      AND status IN ('accepted','proposed') ORDER BY id DESC LIMIT 1`).get(repository.id,input.supersedesKey) as {id:number}|undefined : undefined;
+    if (input.supersedesKey&&!superseded) throw new Error(`Decision to supersede not found: ${input.supersedesKey}`);
+    const result=this.db.prepare(`INSERT INTO repository_decisions(repository_id,decision_key,title,rationale,status,source_kind,source_ref,source_sha,approved_by,approved_at,supersedes_decision_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(repository.id,input.key,input.title,input.rationale,input.status,input.sourceKind,input.sourceRef,input.sourceSha ?? null,input.approvedBy,input.approvedAt,superseded?.id ?? null);
+    if (superseded&&input.status==="accepted") this.db.prepare("UPDATE repository_decisions SET status='superseded' WHERE id=?").run(superseded.id);
+    return Number(result.lastInsertRowid);
+  }
+
+  listRepositoryDecisions(repositoryName:string,query?:string):any[] {
+    const repository=this.getRepository(repositoryName) as {id:number}|undefined;
+    if (!repository) throw new Error(`Repository not found: ${repositoryName}`);
+    const rows=this.db.prepare(`SELECT id,decision_key decisionKey,title,rationale,status,source_kind sourceKind,source_ref sourceRef,
+      source_sha sourceSha,approved_by approvedBy,approved_at approvedAt,supersedes_decision_id supersedesDecisionId
+      FROM repository_decisions WHERE repository_id=? ORDER BY id DESC`).all(repository.id) as any[];
+    if (!query) return rows;
+    const terms=query.toLowerCase().match(/[a-z0-9_-]{3,}/g) ?? [];
+    return rows.map((row)=>({row,score:terms.filter((term)=>`${row.decisionKey} ${row.title} ${row.rationale}`.toLowerCase().includes(term)).length}))
+      .filter((item)=>item.score>0).sort((a,b)=>b.score-a.score||b.row.id-a.row.id).map((item)=>item.row);
+  }
+
   setLastIndexed(repositoryId: number, sha: string): void {
     this.db.prepare("UPDATE repositories SET last_indexed_sha=?, last_indexed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?")
       .run(sha, repositoryId);
@@ -85,8 +143,8 @@ export class MemoryStore {
     const tx = this.db.transaction(() => {
       this.db.prepare("UPDATE routes SET active=0, removed_sha=? WHERE repository_id=? AND active=1").run(sha, repositoryId);
       const upsert = this.db.prepare(`
-        INSERT INTO routes(repository_id,route,route_type,router_type,source_file,layout_chain_json,rendering_mode,dynamic_route,route_params_json,auth_required,middleware_matched,metadata_mode,evidence_json,behavior_files_json,server_component,client_boundaries_json,data_sources_json,backend_dependencies_json,cache_behavior_json,seo_type,metadata_source,middleware_matchers_json,created_sha,last_seen_sha,removed_sha,active)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,1)
+        INSERT INTO routes(repository_id,route,route_type,router_type,source_file,layout_chain_json,rendering_mode,dynamic_route,route_params_json,auth_required,middleware_matched,metadata_mode,evidence_json,behavior_files_json,server_component,client_boundaries_json,data_sources_json,backend_dependencies_json,cache_behavior_json,seo_type,metadata_source,middleware_matchers_json,segment_config_json,control_flow_json,rendering_basis,created_sha,last_seen_sha,removed_sha,active)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,1)
         ON CONFLICT(repository_id,route,source_file) DO UPDATE SET
           route_type=excluded.route_type,router_type=excluded.router_type,layout_chain_json=excluded.layout_chain_json,rendering_mode=excluded.rendering_mode,
           dynamic_route=excluded.dynamic_route,route_params_json=excluded.route_params_json,
@@ -96,6 +154,7 @@ export class MemoryStore {
           data_sources_json=excluded.data_sources_json,backend_dependencies_json=excluded.backend_dependencies_json,
           cache_behavior_json=excluded.cache_behavior_json,seo_type=excluded.seo_type,metadata_source=excluded.metadata_source,
           middleware_matchers_json=excluded.middleware_matchers_json,
+          segment_config_json=excluded.segment_config_json,control_flow_json=excluded.control_flow_json,rendering_basis=excluded.rendering_basis,
           last_seen_sha=excluded.last_seen_sha,removed_sha=NULL,active=1
       `);
       for (const route of routes) {
@@ -104,7 +163,9 @@ export class MemoryStore {
           route.middlewareMatched == null ? null : Number(route.middlewareMatched), route.metadataMode, JSON.stringify(route.evidence),
           JSON.stringify(route.behaviorFiles),route.serverComponent==null ? null : Number(route.serverComponent),JSON.stringify(route.clientBoundaries),
           JSON.stringify(route.dataSources),JSON.stringify(route.backendDependencies),JSON.stringify(route.cacheBehavior),route.seoType,route.metadataSource,
-          JSON.stringify(route.middlewareMatchers),sha,sha);
+          JSON.stringify(route.middlewareMatchers),
+          JSON.stringify(route.segmentConfig ?? {}),JSON.stringify(route.controlFlow ?? []),route.renderingBasis ?? "observed",
+          sha,sha);
       }
     });
     tx();
@@ -151,6 +212,40 @@ export class MemoryStore {
     const routes=this.db.prepare(`SELECT COUNT(*) count FROM routes r JOIN repositories repo ON repo.id=r.repository_id WHERE r.active=1 ${filter}`).get(params) as {count:number};
     const dependencies=this.db.prepare(`SELECT COUNT(*) count FROM dependencies d JOIN repositories repo ON repo.id=d.repository_id WHERE d.active=1 ${filter}`).get(params) as {count:number};
     const routeDependencies=this.db.prepare(`SELECT COUNT(*) count FROM route_dependencies rd JOIN routes r ON r.id=rd.route_id JOIN repositories repo ON repo.id=r.repository_id WHERE r.active=1 ${filter}`).get(params) as {count:number};
+    // Duplication is measured as distinct (type,subject) pairs against stored
+    // rows: one real thing recorded many times inflates retrieval and consumes
+    // the returned window. See docs/REPOSITORY_CONTEXT_ENGINE_NORMALIZATION.md.
+    const duplication=this.db.prepare(`
+      SELECT COUNT(*) rows, COUNT(DISTINCT m.memory_type || char(31) || m.subject) subjects
+      FROM memories m JOIN repositories repo ON repo.id=m.repository_id
+      WHERE m.active=1 ${filter}
+    `).get(params) as {rows:number;subjects:number};
+    // After canonicalization this is no longer duplication but a real signal:
+    // a key declared in every environment and read nowhere in the source.
+    const environmentOnly=this.db.prepare(`
+      SELECT COUNT(*) count FROM memories m JOIN repositories repo ON repo.id=m.repository_id
+      WHERE m.active=1 AND m.memory_type='configuration' ${filter}
+        AND NOT EXISTS(SELECT 1 FROM memory_evidence e WHERE e.memory_id=m.id AND e.file_path NOT LIKE '.env%')
+    `).get(params) as {count:number};
+    // Breadth is only a defect when the evidence cannot support the claim: a route
+    // memory citing its whole import closure. A canonical entity (a config key, a
+    // package) legitimately has one occurrence per file, so it is excluded.
+    const broadEvidence=this.db.prepare(`
+      SELECT COUNT(*) count FROM memories m JOIN repositories repo ON repo.id=m.repository_id
+      WHERE m.active=1 ${filter}
+        AND m.memory_type NOT IN ('configuration','dependency','shared_package')
+        AND (SELECT COUNT(*) FROM memory_evidence e WHERE e.memory_id=m.id) > 4
+    `).get(params) as {count:number};
+
+    // RCE-007: every stored fact currently carries the same confidence value,
+    // so the column proves nothing. This breakdown makes the migration to
+    // observed / derived / inferred / human-approved visible.
+    const confidenceLevels=this.db.prepare(`
+      SELECT m.confidence level, COUNT(*) count
+      FROM memories m JOIN repositories repo ON repo.id=m.repository_id
+      WHERE m.active=1 ${filter} GROUP BY m.confidence ORDER BY count DESC
+    `).all(params) as Array<{level:string;count:number}>;
+
     const total=memory.active_memories ?? 0;
     const repositoryId=repositoryName ? (this.db.prepare("SELECT id FROM repositories WHERE name=?").get(repositoryName) as {id:number}|undefined)?.id : undefined;
     const vectorCount=this.memoryDb.vectorStore?.count({repositoryId}) ?? null;
@@ -169,6 +264,12 @@ export class MemoryStore {
       inferredMemories:memory.inferred ?? 0,
       vectors:vectorCount,
       vectorCoverage:vectorCount==null ? null : ratio(vectorCount),
+      confidenceLevels:Object.fromEntries(confidenceLevels.map((row)=>[row.level,row.count])),
+      distinctConfidenceLevels:confidenceLevels.length,
+      canonicalSubjects:duplication.subjects,
+      duplicationRatio:duplication.rows ? Number(((duplication.rows-duplication.subjects)/duplication.rows).toFixed(4)) : 0,
+      unreadConfigKeys:environmentOnly.count,
+      broadEvidenceMemories:broadEvidence.count,
     };
   }
 

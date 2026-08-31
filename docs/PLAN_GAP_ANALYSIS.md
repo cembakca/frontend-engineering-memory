@@ -47,7 +47,7 @@ P2 ile Codex ve Claude için token-sınırlı, salt-okunur stdio MCP sunucusu; k
 
 ### MCP ve token ekonomisi
 
-Salt-okunur MCP araçları repository profili, route, dependency, değişiklik, arama, açıklama ve kalite bilgisi verir. `memory_explain` varsayılan olarak küçük bir sonuç seti ve karakter bütçesi kullanır; her sonuç kaynak dosyası/evidence içerir. Böylece agent önce merkezi memory'den seçici bağlam alır, yalnız gerektiğinde ilgili source dosyasını açar.
+Salt-okunur MCP yüzeyi exact repository/route envanteri için iki araç ve dependency, değişiklik, flow, impact, debug, plan, verification veya açık uçlu sorular için tek `memory_context` sağlar. Context compiler varsayılan karakter bütçesi içinde intent-specific evidence pack ve fact/relation/inference kullanımını sınırlayan `answerContract` üretir. Böylece agent önce merkezi memory'den seçici bağlam alır, yalnız belirsizlik kaldığında `answerContract.sourceFallback` dosyalarını açar. Operasyonel kalite ölçümü CLI'da kalır.
 
 ### Evidence-gated AI extraction
 

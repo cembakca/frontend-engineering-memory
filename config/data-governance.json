@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "note": "RCE-027. Every rule here is checked by `pnpm memory security-audit`; a rule that cannot be checked is a comment, not a policy.",
+  "secretRedaction": {
+    "rule": "store-key-names-never-values",
+    "detail": "Configuration and environment analysis records the key name, file and line. The assigned value is never read into a fact, an evidence row, telemetry or a snapshot.",
+    "checkedBy": "I1-no-env-values"
+  },
+  "repositoryAccess": {
+    "rule": "registry-is-the-boundary",
+    "detail": "Only repositories listed in the registry are read. Analysis stays inside the repository root, skips the configured distDir and node_modules, and never follows a path outside it.",
+    "checkedBy": "I2-indexed-paths-inside-registry"
+  },
+  "aiExtraction": {
+    "rule": "evidence-gated-and-labelled",
+    "detail": "AI-produced memories must carry producer != 'deterministic', a quality score, and evidence. Normal indexing and retrieval never call an external model.",
+    "checkedBy": "I3-ai-memories-labelled"
+  },
+  "telemetry": {
+    "rule": "shape-not-prose",
+    "detail": "Question text is stored only when MEMORY_TELEMETRY_QUERY_TEXT=1. Fact content, evidence excerpts and configuration values are never stored.",
+    "checkedBy": "I4-telemetry-carries-no-content"
+  },
+  "retention": {
+    "retrieval_events": { "keep": 5000, "unit": "rows", "env": "MEMORY_TELEMETRY_RETENTION" },
+    "index_run_changes": { "keep": 20, "unit": "index-runs" },
+    "deactivated_memories": { "keep": 90, "unit": "days" },
+    "answer_feedback": { "keep": 365, "unit": "days" },
+    "repository_snapshots": { "keep": 10, "unit": "snapshots-per-repository" },
+    "checkedBy": "I5-retention-within-policy"
+  },
+  "audit": {
+    "cadence": "every sync run and before any rollout gate",
+    "failureMode": "a failing invariant blocks the rollout gate (RCE-028/029), it does not merely warn"
+  }
+}

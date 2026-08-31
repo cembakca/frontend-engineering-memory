@@ -70,7 +70,7 @@ function pagesRouteFromRelative(relative: string): { route: string; type: RouteR
   return { route: normalizeRoute(segments.join("/")), type: "page" };
 }
 
-function detectRendering(content: string, router: "app" | "pages"): { mode: RenderingMode; evidence: string[] } {
+function detectRendering(content: string, router: "app" | "pages"): { mode: RenderingMode; evidence: string[]; defaulted?: boolean } {
   const evidence: string[] = [];
   if (router === "pages") {
     if (/\bgetServerSideProps\b/.test(content)) return { mode: "ssr", evidence: ["getServerSideProps"] };
@@ -79,7 +79,7 @@ function detectRendering(content: string, router: "app" | "pages"): { mode: Rend
       return { mode: "ssg", evidence: ["getStaticProps"] };
     }
     if (/dynamic\s*\([^)]*\{[\s\S]*?ssr\s*:\s*false/.test(content)) return { mode: "csr", evidence: ["dynamic(..., { ssr: false })"] };
-    return { mode: "unknown", evidence };
+    return { mode: "unknown", evidence, defaulted: true };
   }
 
   if (/^[\s\S]*?["']use client["']\s*;?/m.test(content)) {
@@ -108,7 +108,7 @@ function detectRendering(content: string, router: "app" | "pages"): { mode: Rend
     return { mode: "static", evidence };
   }
   if (/^[\s\S]*?["']use client["']\s*;?/m.test(content)) return { mode: "csr", evidence };
-  return { mode: "rsc", evidence: ["App Router page without detected dynamic trigger"] };
+  return { mode: "rsc", evidence: ["App Router page without detected dynamic trigger"], defaulted: true };
 }
 
 function renderingPriority(mode: RenderingMode): number {
@@ -200,8 +200,25 @@ export async function scanRoutes(repoPath: string): Promise<RouteRecord[]> {
     const routerType = appPrefix ? "app" : "pages";
     const layoutChain = await layoutChainFor(repoPath, sourceFile, routerType);
     const behaviorFiles = await moduleGraph.reachableFrom([sourceFile,...layoutChain]);
-    let renderingMode = detectRendering(content,routerType).mode;
-    const evidence = detectRendering(content,routerType).evidence.map((item) => `${sourceFile}: ${item}`);
+    const ownRendering = detectRendering(content,routerType);
+    const ownFacts = extractSourceFacts(sourceFile,content);
+    const segmentConfig = ownFacts.segmentConfig;
+    const controlFlow = ownFacts.controlFlow.map((signal)=>({kind:signal.kind,target:signal.target,conditional:signal.conditional}));
+    // A page whose body always redirects never renders, so no helper signal can
+    // describe it. Control flow outranks rendering classification.
+    const alwaysRedirects = controlFlow.some((signal)=>signal.kind!=="not-found"&&!signal.conditional);
+    // `export const dynamic` / `revalidate` are the framework's own authority for
+    // this segment; a signal found in a reachable helper cannot override them.
+    const hasDirective = Boolean(segmentConfig.dynamic||segmentConfig.revalidate);
+    let renderingMode = ownRendering.mode;
+    let renderingBasis:RouteRecord["renderingBasis"] = alwaysRedirects ? "observed"
+      : hasDirective ? "directive"
+      : ownRendering.defaulted ? "default" : "observed";
+    const evidence = ownRendering.evidence.map((item) => `${sourceFile}: ${item}`);
+    for (const signal of ownFacts.controlFlow) {
+      evidence.push(`${sourceFile}:${signal.line}: ${signal.kind}${signal.target ? ` -> ${signal.target}` : ""}${signal.conditional ? " (conditional)" : ""}`);
+    }
+    for (const [key,value] of Object.entries(segmentConfig)) evidence.push(`${sourceFile}: export const ${key} = ${value}`);
     let authSignal = /\b(access_token|refresh_token|isLoggedIn|session|auth(?:entication|orization)?)\b/i.test(content);
     const clientBoundaries:string[]=[];
     const dataSources:string[]=[];
@@ -225,8 +242,13 @@ export async function scanRoutes(repoPath: string): Promise<RouteRecord[]> {
       const behaviorRendering = detectRendering(behaviorContent,routerType);
       // A nested client boundary does not make the whole route CSR, but dynamic server APIs
       // and cache/revalidation signals in reachable modules affect the route.
-      if (behaviorRendering.mode !== "csr" && behaviorRendering.mode !== "rsc" && behaviorRendering.mode !== "unknown") {
-        renderingMode = mergeRendering(renderingMode,behaviorRendering.mode);
+      // Reachability is not contribution: a helper cannot re-classify a route that
+      // redirects unconditionally or that declares its own segment config.
+      if (!alwaysRedirects && !hasDirective
+        && behaviorRendering.mode !== "csr" && behaviorRendering.mode !== "rsc" && behaviorRendering.mode !== "unknown") {
+        const merged = mergeRendering(renderingMode,behaviorRendering.mode);
+        if (merged !== renderingMode) renderingBasis = "inherited";
+        renderingMode = merged;
         evidence.push(...behaviorRendering.evidence.map((item) => `${behaviorFile}: ${item}`));
       }
       if (/\b(access_token|refresh_token|isLoggedIn|session|auth(?:entication|orization)?)\b/i.test(behaviorContent)) authSignal = true;
@@ -273,6 +295,9 @@ export async function scanRoutes(repoPath: string): Promise<RouteRecord[]> {
       metadataSource,
       middlewareMatchers:matched ? middleware?.matchers ?? [] : [],
       evidence: [...new Set(evidence)],
+      segmentConfig,
+      controlFlow,
+      renderingBasis,
       behaviorFiles:routeBehaviorFiles,
       dependencies:dependencies.filter((dependency,index,all)=>all.findIndex((item)=>item.dependencyType===dependency.dependencyType && item.name===dependency.name && item.sourceFile===dependency.sourceFile && item.usageType===dependency.usageType)===index),
     });

@@ -2,7 +2,7 @@ import path from "node:path";
 import { access } from "node:fs/promises";
 import {
   analyzeProjectFile, analyzeRepositoryDependencies, analyzeRepositoryProfile, analyzeSourceFile,
-  dependencyMemories, listAnalyzableSourceFiles, listProjectAnalysisFiles, repositoryProfileMemory,
+  canonicalizeMemories, dependencyMemories, listAnalyzableSourceFiles, listProjectAnalysisFiles, repositoryProfileMemory,
   routeMemory, scanRoutes,
 } from "../analyzers/index.js";
 import { assertRepositorySnapshot, changedFiles, isAncestor, isGitRepository, refreshManagedCheckout } from "../git/git.js";
@@ -11,6 +11,7 @@ import { MemoryStore } from "../memory/store.js";
 import { persistVectors, prepareVectors } from "../memory/vectorize.js";
 import type { MemoryCandidate, PreparedMemoryCandidate, RepositoryConfig, RouteRecord, SyncOptions } from "../types.js";
 import { classifyFile } from "./classifier.js";
+import { extractSymbolGraph } from "../analyzers/symbol-graph.js";
 
 const SOURCE_EXT=/\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 
@@ -34,11 +35,12 @@ export async function fullIndex(config:RepositoryConfig,memoryDb:MemoryDatabase,
   const routes=await scanRoutes(config.path);
   const dependencies=await analyzeRepositoryDependencies(config.path);
   const sourceFiles=await listAnalyzableSourceFiles(config.path);
+  const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
   const projectFiles=await listProjectAnalysisFiles(config.path);
   const candidates:MemoryCandidate[]=[repositoryProfileMemory(profile),...routes.map(routeMemory),...dependencyMemories(dependencies)];
   for (const file of sourceFiles) candidates.push(...await analyzeSourceFile(config.path,file));
   for (const file of projectFiles) candidates.push(...await analyzeProjectFile(config.path,file));
-  const prepared=await store.prepareMemories(config.path,candidates);
+  const prepared=await store.prepareMemories(config.path,canonicalizeMemories(candidates));
   const partition=existing ? store.partitionPreparedMemories(existing.id,prepared) : {reused:[],fresh:prepared};
   const preservedAiIds=existing ? await store.validActiveAiMemoryIds(existing.id,config.path) : new Set<number>();
   const missingReused=store.vectorEnabled ? partition.reused.filter((item)=>!memoryDb.vectorStore?.has(item.id)) : [];
@@ -59,6 +61,7 @@ export async function fullIndex(config:RepositoryConfig,memoryDb:MemoryDatabase,
     persistVectors(store,[...ids,...missingReused.map((item)=>item.id)],vectors);
     store.recordReusedMemories(runId,partition.reused);
     created=ids.length;
+    store.captureRepositorySnapshot(repositoryId,config.name,head,profile as any,graph);
     store.setLastIndexed(repositoryId,head);
     store.finishRun(runId,{changedFiles:sourceFiles.length+projectFiles.length,memoriesCreated:created,memoriesDeleted:deactivated});
   });
@@ -72,7 +75,12 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   const repositoryId=existing.id;
   if (fromSha===head) {
     const routes=await scanRoutes(config.path);
-    store.transaction(()=>store.reconcileRoutes(repositoryId,routes,head));
+    const sourceFiles=await listAnalyzableSourceFiles(config.path);
+    const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
+    store.transaction(()=>{
+      store.reconcileRoutes(repositoryId,routes,head);
+      store.captureRepositorySnapshot(repositoryId,config.name,head,profile as any,graph);
+    });
     return {type:"NOOP",repository:config.name,sha:head,routes:routes.length,changedFiles:0};
   }
   if (!(await isAncestor(config.path,fromSha,head))) {
@@ -84,6 +92,8 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   const classified=changes.map((change)=>({...change,classification:classifyFile(change.path)}));
   const relevant=classified.filter((change)=>change.classification.memoryRelevant);
   const routes=await scanRoutes(config.path);
+  const snapshotFiles=await listAnalyzableSourceFiles(config.path);
+  const graph=await extractSymbolGraph(config.path,snapshotFiles,routes.map((route)=>route.route));
   const changedPaths=new Set(changes.flatMap((change)=>change.previousPath ? [change.previousPath,change.path] : [change.path]));
   const affectedRouteKeys=store.routeKeysAffectedByFiles(repositoryId,changedPaths);
   for (const route of routes) if (route.behaviorFiles.some((file)=>changedPaths.has(file)) || changedPaths.has(route.sourceFile)) affectedRouteKeys.add(routeKey(route));
@@ -102,7 +112,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   }
   const affectedRoutes=routes.filter((route)=>affectedRouteKeys.has(routeKey(route)));
   candidates.push(...affectedRoutes.map(routeMemory));
-  const prepared=await store.prepareMemories(config.path,candidates);
+  const prepared=await store.prepareMemories(config.path,canonicalizeMemories(candidates));
   const partition=store.partitionPreparedMemories(repositoryId,prepared);
   const reusedIds=new Set(partition.reused.map((item)=>item.id));
   const missingReused=store.vectorEnabled ? partition.reused.filter((item)=>!memoryDb.vectorStore?.has(item.id)) : [];
@@ -130,6 +140,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
     persistVectors(store,[...ids,...missingReused.map((item)=>item.id)],vectors);
     store.recordReusedMemories(runId,partition.reused);
     created=ids.length;
+    store.captureRepositorySnapshot(repositoryId,config.name,head,profile as any,graph);
     store.setLastIndexed(repositoryId,head);
     store.finishRun(runId,{changedFiles:changes.length,memoriesCreated:created,memoriesDeleted:deactivated});
   });

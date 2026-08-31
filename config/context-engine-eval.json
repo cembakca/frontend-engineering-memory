@@ -1,0 +1,462 @@
+{
+  "suite": "RCE-002 first-15 A/B baseline",
+  "repository": "hangikredi.aboutus.fe.next",
+  "targetSha": "6d5978b3b82ea1734868a4b2ccf870f40e389d14",
+  "baselineDiscovery": {
+    "note": "A memory-less agent must first discover the tree. Measured once and added to every baseline read cost.",
+    "command": "git ls-files src"
+  },
+  "cases": [
+    {
+      "id": "RCE-E03",
+      "job": "lookup",
+      "strict": true,
+      "question": "`/` isteği gerçekte ne yapıyor?",
+      "strictFact": "redirect(\"/hakkimizda\")",
+      "forbiddenClaims": [
+        "renders content",
+        "menu render",
+        "isr content page"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/page.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "route": "/"
+          }
+        }
+      ],
+      "packForbidden": [
+        "\"rendering\":\"isr\""
+      ]
+    },
+    {
+      "id": "RCE-F01",
+      "job": "flow",
+      "strict": false,
+      "question": "İletişim formu kullanıcı girdisini upstream backend'e hangi sırayla gönderiyor?",
+      "strictFact": "ContactForm -> getCaptchaAuth -> POST /api/pages/aboutus/insertcomment -> GATEWAY_URL/pages/aboutus/insertcomment",
+      "forbiddenClaims": [
+        "server action",
+        "direct gateway call from browser"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/components/contact/ContactForm.tsx",
+        "src/lib/contact.ts",
+        "src/lib/captcha/get-captcha-token.ts",
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/lib/gateway.ts"
+      ],
+      "baselineReadSet": [
+        "src/components/contact/ContactForm.tsx",
+        "src/lib/contact.ts",
+        "src/lib/captcha/get-captcha-token.ts",
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/lib/gateway.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-F03",
+      "job": "flow",
+      "strict": false,
+      "question": "Contact captcha tokenı nasıl üretilip upstream header'a dönüşüyor?",
+      "strictFact": "hcaptchaAdapter.execute -> getCaptchaAuth -> body.captchaToken -> readCaptchaFromBody -> buildCaptchaHeaders X-Captcha-Token/X-Captcha-Version",
+      "forbiddenClaims": [
+        "captcha verified in this app",
+        "server-side hcaptcha secret verify"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/lib/captcha/captcha-registry.ts",
+        "src/lib/captcha/providers/hcaptcha-adapter.ts",
+        "src/lib/captcha/get-captcha-token.ts",
+        "src/lib/captcha/captcha-headers.ts",
+        "src/app/api/pages/aboutus/insertcomment/route.ts"
+      ],
+      "baselineReadSet": [
+        "src/lib/captcha/captcha-registry.ts",
+        "src/lib/captcha/providers/hcaptcha-adapter.ts",
+        "src/lib/captcha/get-captcha-token.ts",
+        "src/lib/captcha/captcha-headers.ts",
+        "src/lib/captcha/captcha-config.ts",
+        "src/app/api/pages/aboutus/insertcomment/route.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-I01",
+      "job": "impact",
+      "strict": false,
+      "question": "src/lib/legal-pages/manifest.ts değişirse hangi route ve bileşenler etkilenir?",
+      "strictFact": "manifest -> agreements.ts -> /[slug] route + agreements components (AgreementArticle, AgreementSidebar, LegalSubNav)",
+      "forbiddenClaims": [
+        "all routes affected",
+        "unrelated route list"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/lib/legal-pages/manifest.ts",
+        "src/lib/agreements.ts",
+        "src/app/[slug]/page.tsx",
+        "src/components/agreements/AgreementArticle.tsx"
+      ],
+      "baselineReadSet": [
+        "src/lib/legal-pages/manifest.ts",
+        "src/lib/agreements.ts",
+        "src/app/[slug]/page.tsx",
+        "src/components/agreements/AgreementArticle.tsx",
+        "src/components/agreements/AgreementSidebar.tsx",
+        "src/components/agreements/LegalSubNav.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-D07",
+      "job": "debug",
+      "strict": true,
+      "question": "Projenin error-handling ve automated-test stratejisi nedir?",
+      "strictFact": "no automated test framework, no test script, no error.tsx boundary; only lint/build scripts exist",
+      "forbiddenClaims": [
+        ".env.test is a test strategy",
+        "Dockerfile.test is a test suite",
+        "jest",
+        "vitest",
+        "playwright"
+      ],
+      "policy": "report-gap",
+      "expectedEvidence": [
+        "package.json"
+      ],
+      "baselineReadSet": [
+        "package.json"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        },
+        {
+          "tool": "memory_repository",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-E02",
+      "job": "lookup",
+      "strict": true,
+      "question": "Bütün aktif HTTP route'larını ve source dosyalarını listele.",
+      "strictFact": "9 routes: / /[slug] /ekibimiz /hakkimizda /iletisim /kariyer /medyada-biz + 2 api route handlers",
+      "forbiddenClaims": [
+        "routes not in the app directory"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/page.tsx",
+        "src/app/[slug]/page.tsx",
+        "src/app/ekibimiz/page.tsx",
+        "src/app/hakkimizda/page.tsx",
+        "src/app/iletisim/page.tsx",
+        "src/app/kariyer/page.tsx",
+        "src/app/medyada-biz/page.tsx",
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts"
+      ],
+      "baselineReadSet": [
+        "src/app/page.tsx",
+        "src/app/[slug]/page.tsx",
+        "src/app/ekibimiz/page.tsx",
+        "src/app/hakkimizda/page.tsx",
+        "src/app/iletisim/page.tsx",
+        "src/app/kariyer/page.tsx",
+        "src/app/medyada-biz/page.tsx",
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "limit": 50
+          }
+        }
+      ]
+    },
+    {
+      "id": "RCE-E08",
+      "job": "lookup",
+      "strict": true,
+      "question": "Menü hangi upstream endpoint'ten gelir ve cache süresi nedir?",
+      "strictFact": "GET ${GATEWAY_URL}/pages/menuitem/list?webVersionCode=2 with next.revalidate 900",
+      "forbiddenClaims": [
+        "no-store",
+        "client-side menu fetch"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/lib/menu.ts"
+      ],
+      "baselineReadSet": [
+        "src/lib/menu.ts",
+        "src/lib/gateway.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-F02",
+      "job": "flow",
+      "strict": false,
+      "question": "Newsletter aboneliği UI'dan backend'e hangi sırayla gider?",
+      "strictFact": "NewsletterForm(pageId) -> getCaptchaAuth('subscribe') -> POST /api/customer-services/v2/subscribes -> GATEWAY_URL/customer-services/v2/subscribes",
+      "forbiddenClaims": [
+        "server action",
+        "same handler as contact"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/components/NewsletterForm.tsx",
+        "src/lib/newsletter.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts",
+        "src/lib/gateway.ts"
+      ],
+      "baselineReadSet": [
+        "src/components/NewsletterForm.tsx",
+        "src/lib/newsletter.ts",
+        "src/lib/captcha/get-captcha-token.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts",
+        "src/lib/gateway.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-F06",
+      "job": "flow",
+      "strict": false,
+      "question": "Global menü hangi layout/component zinciriyle tüm sayfalara ulaşır?",
+      "strictFact": "layout.tsx getMenuList() -> SiteChrome(headerItems, footerItems) -> Header/Footer from @hangikredi/components on every route",
+      "forbiddenClaims": [
+        "per-page menu fetch",
+        "middleware injects menu"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/layout.tsx",
+        "src/components/layout/SiteChrome.tsx",
+        "src/lib/menu.ts"
+      ],
+      "baselineReadSet": [
+        "src/app/layout.tsx",
+        "src/components/layout/SiteChrome.tsx",
+        "src/lib/menu.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-I02",
+      "job": "impact",
+      "strict": false,
+      "question": "GATEWAY_URL davranışı değişirse hangi handler, fetch ve route'lar etkilenir?",
+      "strictFact": "gateway.ts (fetchAboutPage), menu.ts (getMenuList), both API route handlers, and next.config.ts rewrites",
+      "forbiddenClaims": [
+        "only one handler",
+        "client-side usage"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/lib/gateway.ts",
+        "src/lib/menu.ts",
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts",
+        "next.config.ts"
+      ],
+      "baselineReadSet": [
+        "src/lib/gateway.ts",
+        "src/lib/menu.ts",
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts",
+        "next.config.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-I05",
+      "job": "impact",
+      "strict": false,
+      "question": "hCaptcha adapter değişirse hangi kullanıcı akışları risklidir; API handler'lar doğrudan etkilenir mi?",
+      "strictFact": "hcaptcha-adapter is the only registered provider; contact and subscribe client flows depend on it, but neither POST handler has a graph dependency on the client adapter",
+      "forbiddenClaims": [
+        "multiple providers configured",
+        "recaptcha fallback"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/lib/captcha/providers/hcaptcha-adapter.ts",
+        "src/lib/captcha/captcha-registry.ts",
+        "src/components/contact/ContactForm.tsx",
+        "src/components/NewsletterForm.tsx"
+      ],
+      "baselineReadSet": [
+        "src/lib/captcha/providers/hcaptcha-adapter.ts",
+        "src/lib/captcha/captcha-registry.ts",
+        "src/lib/captcha/get-captcha-token.ts",
+        "src/components/contact/ContactForm.tsx",
+        "src/components/NewsletterForm.tsx",
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-P03",
+      "job": "implementation",
+      "strict": false,
+      "question": "Yeni captcha korumalı form eklerken hangi mevcut pattern izlenmeli?",
+      "strictFact": "client component + getCaptchaAuth(feature) + POST to own /api route + readCaptchaFromBody + buildCaptchaHeaders + GATEWAY_URL guard; feature must be added to CAPTCHA_FEATURE_CONFIG",
+      "forbiddenClaims": [
+        "server action pattern",
+        "captcha verified locally"
+      ],
+      "policy": "targeted-source",
+      "expectedEvidence": [
+        "src/components/contact/ContactForm.tsx",
+        "src/components/NewsletterForm.tsx",
+        "src/lib/captcha/captcha-config.ts",
+        "src/lib/captcha/captcha-headers.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts"
+      ],
+      "baselineReadSet": [
+        "src/components/contact/ContactForm.tsx",
+        "src/components/NewsletterForm.tsx",
+        "src/lib/captcha/captcha-config.ts",
+        "src/lib/captcha/captcha-headers.ts",
+        "src/lib/captcha/get-captcha-token.ts",
+        "src/app/api/customer-services/v2/subscribes/route.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-D01",
+      "job": "debug",
+      "strict": true,
+      "question": "Contact form neden `400 Captcha failed` döndürebilir?",
+      "strictFact": "readCaptchaFromBody returns null when body.captchaToken is missing or empty string",
+      "forbiddenClaims": [
+        "gateway rejected the captcha",
+        "invalid site key returns 400 from this handler"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/lib/captcha/captcha-headers.ts"
+      ],
+      "baselineReadSet": [
+        "src/app/api/pages/aboutus/insertcomment/route.ts",
+        "src/lib/captcha/captcha-headers.ts",
+        "src/components/contact/ContactForm.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RCE-N03",
+      "job": "negative",
+      "strict": true,
+      "question": "Working tree dirty ise memory \"güncel\" sayılabilir mi?",
+      "strictFact": "indexed SHA equals HEAD but the working tree has uncommitted changes, so memory is snapshot-fresh yet not tree-accurate",
+      "forbiddenClaims": [
+        "memory is fully current",
+        "no verification needed"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [],
+      "baselineReadSet": [],
+      "plan": [
+        {
+          "tool": "memory_repository",
+          "args": {}
+        }
+      ],
+      "gitCheck": true
+    },
+    {
+      "id": "RCE-N07",
+      "job": "negative",
+      "strict": true,
+      "question": "Ekip neden Next.js 16'yı seçti?",
+      "strictFact": "no ADR, PR body or human-approved decision record is indexed; the engine must abstain",
+      "forbiddenClaims": [
+        "performance reasons",
+        "team preference",
+        "any invented rationale"
+      ],
+      "policy": "abstain",
+      "expectedEvidence": [],
+      "baselineReadSet": [],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    }
+  ],
+  "note": "Plans exercise the three agent-facing MCP tools (RCE-019). Measuring a tool the server no longer exposes measures a path no agent can take."
+}

@@ -56,7 +56,7 @@ Routes are first-class structured data. Exact questions such as “list all acti
 - Vector: conceptual questions where wording differs; repository partition and memory type metadata are filtered inside KNN.
 - Hybrid search: query understanding selects channels and combines their scores with channel provenance.
 
-Agent-facing retrieval is deliberately bounded. MCP tools return compact structured results; `memory_explain` assembles a small evidence-bearing context packet with result and character limits. The agent is instructed to query memory first and open repository files only when the returned evidence is insufficient. This avoids sending an entire repository—or large generated summaries—to an LLM on every task.
+Agent-facing retrieval is deliberately bounded. MCP exposes exact `memory_repository`/`memory_route` inventory and one intent-aware `memory_context` compiler. The compiler returns task-specific, evidence-bearing packs with a character limit and a machine-readable `answerContract`. The agent is instructed to query memory first and open only `answerContract.sourceFallback` files when uncertainty remains. This avoids sending an entire repository—or large generated summaries—to an LLM on every task.
 
 ## Dependency and audit model
 

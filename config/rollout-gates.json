@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "note": "RCE-028/029 gates. Thresholds restate the RCE-001 acceptance contract and the RCE-004 economy contract; the gate reads measured runs, never opinions.",
+  "secondPilot": {
+    "retrieval": {
+      "meanEvidenceRecall": {
+        "min": 0.9,
+        "source": "context-eval run"
+      },
+      "strictCaseCorrectness": {
+        "min": 1.0,
+        "source": "context-eval run, strict cases"
+      },
+      "cleanCaseRate": {
+        "min": 0.8,
+        "source": "context-eval run, cases with no primary miss class"
+      }
+    },
+    "economy": {
+      "effectiveMedianSaving": {
+        "min": 1,
+        "source": "context-economy run"
+      },
+      "engineLosesCaseRate": {
+        "max": 0.1,
+        "source": "context-economy run, negative nominal saving"
+      }
+    },
+    "semantics": {
+      "blockingOpenGaps": {
+        "max": 0,
+        "source": "src/analyzers/semantic-gaps.ts"
+      }
+    },
+    "governance": {
+      "securityAuditFailures": {
+        "max": 0,
+        "source": "security-audit"
+      }
+    },
+    "candidate": {
+      "rule": "architecture-diversity-only",
+      "detail": "A second pilot is justified only by a router or architecture the first pilot does not exercise. A second repository of the same shape adds cost and no new evidence."
+    }
+  },
+  "multiRepository": {
+    "note": "RCE-029. Growth is gated per wave. A regression in an already-onboarded repository halts growth even when the new candidate is ready.",
+    "waves": [
+      {
+        "name": "pilot",
+        "size": 1,
+        "entry": "RCE-001 contract met on the pilot",
+        "soakDays": 0
+      },
+      {
+        "name": "diversity",
+        "size": 2,
+        "entry": "second-pilot gate open; candidate exercises a different router or architecture",
+        "soakDays": 7
+      },
+      {
+        "name": "squad",
+        "size": 4,
+        "entry": "both pilots healthy for the full soak; operating cost within budget",
+        "soakDays": 14
+      },
+      {
+        "name": "division",
+        "size": 8,
+        "entry": "no repository below the health floor; cost per repository not rising",
+        "soakDays": 14
+      },
+      {
+        "name": "fleet",
+        "size": 16,
+        "entry": "steady state on the previous wave",
+        "soakDays": 30
+      }
+    ],
+    "healthFloor": {
+      "freshnessState": [
+        "fresh",
+        "tree-dirty"
+      ],
+      "securityAuditFailures": {
+        "max": 0
+      },
+      "duplicationRatio": {
+        "max": 0.05
+      },
+      "evidenceCoverage": {
+        "min": 0.95
+      }
+    },
+    "operatingCost": {
+      "databaseBytesPerRepository": {
+        "max": 52428800
+      },
+      "retrievalLatencyP95Ms": {
+        "max": 5000
+      },
+      "note": "Measured, not estimated. Cost per repository must not rise as the registry grows; a rising slope means the design does not scale and the wave is held."
+    }
+  }
+}

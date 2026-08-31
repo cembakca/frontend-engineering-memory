@@ -1,0 +1,12 @@
+{
+  "key": "adr.cache.v2",
+  "title": "Customer responses bypass shared cache",
+  "rationale": "Responses are customer-specific, so shared revalidation may expose stale or incorrect data.",
+  "status": "accepted",
+  "sourceKind": "adr",
+  "sourceRef": "docs/adr/002-customer-cache.md",
+  "sourceSha": "0123456789abcdef0123456789abcdef01234567",
+  "approvedBy": "architecture-board",
+  "approvedAt": "2026-08-31T10:00:00Z",
+  "supersedesKey": "adr.cache.v1"
+}

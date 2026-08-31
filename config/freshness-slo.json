@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "note": "RCE-026 freshness targets. Lag is measured from the commit timestamp to the moment indexing completed, not from when the sync was triggered — a slow trigger is still a slow answer.",
+  "targets": {
+    "mergeToIndexedLagSeconds": {
+      "target": 900,
+      "breach": 86400,
+      "rationale": "Sync is triggered by CI after merge on main. Fifteen minutes keeps an answer within one review cycle; a day-old index is a different repository."
+    },
+    "reconciliationDriftCommits": {
+      "target": 0,
+      "warn": 1,
+      "breach": 10,
+      "rationale": "Any drift means answers describe a snapshot nobody is working on. One commit is tolerable between merge and sync; ten means the pipeline is broken."
+    },
+    "staleAnswerBehaviour": {
+      "requirement": "every-pack-declares-freshness",
+      "rationale": "The engine cannot prevent drift, but it must never present a drifted or tree-dirty snapshot as current. A pack that omits its freshness state is a contract breach even when the data is fresh."
+    }
+  }
+}

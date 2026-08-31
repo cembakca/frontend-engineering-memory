@@ -33,9 +33,15 @@ export function Offers(){
   return DOMPurify.sanitize(String(visible));
 }`);
     const memories=await analyzeSourceFile(root,sourceFile);
-    for (const type of ["state_management","security","performance_observation","business_rule","business_capability"] as const) {
+    for (const type of ["state_management","security","performance_observation","business_rule"] as const) {
       assert.ok(memories.some((memory)=>memory.type===type),`missing ${type}`);
     }
+    // RCE-006 R1: a capability derived from the path states nothing the routes table
+    // does not already hold, so it is rejected at extraction.
+    assert.equal(memories.some((memory)=>memory.type==="business_capability"),false,
+      "a path-derivable capability must not be emitted");
+    assert.equal(memories.some((memory)=>memory.type==="design_system"),false,
+      "an internal-package import restates the dependencies row");
     const rule=memories.find((memory)=>memory.type==="business_rule");
     assert.ok(rule?.startLine);
     assert.ok(rule?.endLine);

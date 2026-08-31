@@ -63,6 +63,9 @@ export class MemoryDatabase {
       ["seo_type","TEXT NOT NULL DEFAULT 'unknown'"],
       ["metadata_source","TEXT"],
       ["middleware_matchers_json","TEXT NOT NULL DEFAULT '[]'"],
+      ["segment_config_json","TEXT NOT NULL DEFAULT '{}'"],
+      ["control_flow_json","TEXT NOT NULL DEFAULT '[]'"],
+      ["rendering_basis","TEXT NOT NULL DEFAULT 'observed'"],
     ];
     for (const [name,declaration] of routeMigrations) {
       if (!routeColumns.some((column) => column.name === name)) this.db.exec(`ALTER TABLE routes ADD COLUMN ${name} ${declaration}`);

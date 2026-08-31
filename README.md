@@ -13,6 +13,36 @@ It does **not** generate repository Markdown documentation. It stores current te
 - [Codex/Claude token-economic usage](docs/AI_USAGE.md)
 - [Repository Context Engine TODO](docs/REPOSITORY_CONTEXT_ENGINE_TODO.md)
 - [Repository Context Engine evaluation contract](docs/REPOSITORY_CONTEXT_ENGINE_EVALUATION.md)
+- [RCE-002 A/B baseline results](docs/REPOSITORY_CONTEXT_ENGINE_BASELINE.md)
+- [RCE-002 live A/B run-book](docs/RCE-002-AB-RUNBOOK.md)
+- [RCE-003 retrieval miss taxonomy](docs/REPOSITORY_CONTEXT_ENGINE_MISS_TAXONOMY.md)
+- [RCE-004 context economy contract](docs/REPOSITORY_CONTEXT_ENGINE_ECONOMY.md)
+- [RCE-005 entity/evidence normalization design](docs/REPOSITORY_CONTEXT_ENGINE_NORMALIZATION.md)
+- [RCE-006 memory acceptance policy](docs/REPOSITORY_CONTEXT_ENGINE_ACCEPTANCE.md)
+- [RCE-007 fact confidence contract](docs/REPOSITORY_CONTEXT_ENGINE_CONFIDENCE.md)
+- [RCE-008 analyzer semantic correctness pack](docs/REPOSITORY_CONTEXT_ENGINE_SEMANTIC_CORRECTNESS.md)
+- [RCE-009 graph ontology](docs/REPOSITORY_CONTEXT_ENGINE_GRAPH_ONTOLOGY.md)
+- [RCE-010 symbol/component graph extraction](docs/REPOSITORY_CONTEXT_ENGINE_SYMBOL_GRAPH.md)
+- [RCE-011 flow traversal](docs/REPOSITORY_CONTEXT_ENGINE_FLOW_TRAVERSAL.md)
+- [RCE-012 change-impact traversal](docs/REPOSITORY_CONTEXT_ENGINE_CHANGE_IMPACT.md)
+- [RCE-013 test/verification graph](docs/REPOSITORY_CONTEXT_ENGINE_TEST_VERIFICATION.md)
+- [RCE-014 task intent model](docs/REPOSITORY_CONTEXT_ENGINE_TASK_INTENT.md)
+- [RCE-015 query planning](docs/REPOSITORY_CONTEXT_ENGINE_QUERY_PLAN.md)
+- [RCE-016 canonical dedupe and ranking](docs/REPOSITORY_CONTEXT_ENGINE_RANKING.md)
+- [RCE-017 typed context-pack schemas](docs/REPOSITORY_CONTEXT_ENGINE_CONTEXT_PACKS.md)
+- [RCE-018 answer contract](docs/REPOSITORY_CONTEXT_ENGINE_ANSWER_CONTRACT.md)
+- [RCE-019 simplified MCP surface](docs/REPOSITORY_CONTEXT_ENGINE_MCP_SURFACE.md)
+- [RCE-020 behavior diff](docs/REPOSITORY_CONTEXT_ENGINE_BEHAVIOR_DIFF.md)
+- [RCE-021 point-in-time context](docs/REPOSITORY_CONTEXT_ENGINE_POINT_IN_TIME.md)
+- [RCE-022 decision provenance](docs/REPOSITORY_CONTEXT_ENGINE_DECISION_PROVENANCE.md)
+- [RCE-023 memory ownership boundary](docs/REPOSITORY_CONTEXT_ENGINE_MEMORY_OWNERSHIP.md)
+- [RCE-024 retrieval telemetry](docs/REPOSITORY_CONTEXT_ENGINE_TELEMETRY.md)
+- [RCE-025 answer feedback loop](docs/REPOSITORY_CONTEXT_ENGINE_FEEDBACK.md)
+- [RCE-026 freshness SLO](docs/REPOSITORY_CONTEXT_ENGINE_FRESHNESS.md)
+- [RCE-027 security and data governance](docs/REPOSITORY_CONTEXT_ENGINE_GOVERNANCE.md)
+- [RCE-028 second pilot acceptance gate](docs/REPOSITORY_CONTEXT_ENGINE_ROLLOUT_GATE.md)
+- [RCE-029 controlled multi-repository rollout](docs/REPOSITORY_CONTEXT_ENGINE_ROLLOUT.md)
+- [Holistic implementation pass results](docs/REPOSITORY_CONTEXT_ENGINE_IMPLEMENTATION_PASS.md)
 
 ## What is implemented
 
@@ -50,6 +80,9 @@ It does **not** generate repository Markdown documentation. It stores current te
 - `EmbeddingProvider` and `VectorStore` abstractions
 - HTTP API for CI/agent integration
 - Token-bounded read-only MCP server for Codex and Claude
+- Machine-readable answer contract for facts, derived relations, inference and uncertainty
+- Indexed-SHA snapshots, semantic behavior diff and point-in-time context
+- Human-approved decision provenance with explicit supersession
 - Evidence-gated optional AI business-memory extraction
 - Scheduled hash-aware reconciliation
 - Memory/vector coverage metrics and retrieval Recall@K evaluation
@@ -198,7 +231,7 @@ npm run build
 npm run mcp
 ```
 
-The server exposes read-only, token-bounded tools for repository profiles, routes, dependencies, hybrid search, changed memories, explanation context and quality metrics. See [AI_USAGE.md](docs/AI_USAGE.md) for one-time Codex/Claude registration commands and the memory-first agent policy.
+The server exposes three read-only tools: `memory_repository` and `memory_route` for exact inventory, plus intent-aware `memory_context` for bounded flow, impact, debug, implementation, verification, change-review, point-in-time, behavior-diff, approved-decision and lookup packs. Quality, snapshot and decision-ingest commands remain available through the CLI. See [AI_USAGE.md](docs/AI_USAGE.md) for one-time Codex/Claude registration commands and the memory-first agent policy.
 
 ## Reconciliation and quality
 
@@ -208,6 +241,21 @@ npm run memory -- reconcile-all
 npm run memory -- quality hangikredi.deposit.fe.next
 npm run memory -- evaluate
 ```
+
+`evaluate` measures Recall@K for the retrieval smoke suite. `context-eval` runs the task-level Repository Context Engine suite instead: it executes each case's MCP tool plan, measures engine context against the source files a memory-less agent would have to open, and reports required-evidence recall per case.
+
+```bash
+npm run memory -- context-eval                                  # config/context-engine-eval.json
+npm run memory -- context-eval config/context-engine-eval.json  # explicit suite
+```
+
+`context-economy` reads a `context-eval` run back and splits the cost ledger: the fixed per-session cost of the MCP tool schemas, server instructions and the repository policy block, against the per-question payload. It reports both a nominal saving (the pack replaces the source read) and an effective saving (only a clean pack replaces it). Cache and total-context figures stay `null` — only the client knows those.
+
+```bash
+npm run memory -- context-economy --policy=../your-repo/AGENTS.md
+```
+
+Answer quality is deliberately not scored by the harness; each case carries an empty `answerScore` for a human or agent pass. Results are recorded in [the RCE-002 baseline](docs/REPOSITORY_CONTEXT_ENGINE_BASELINE.md).
 
 Set `MEMORY_RECONCILE_INTERVAL_MINUTES=60` when running `npm run serve` to enable hourly reconciliation. Unchanged hashes retain their memory IDs and vectors.
 

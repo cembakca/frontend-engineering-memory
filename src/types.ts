@@ -94,6 +94,12 @@ export interface RouteRecord {
   evidence: string[];
   behaviorFiles: string[];
   dependencies: RouteDependencyCandidate[];
+  /** Route segment config declared by the page itself; authoritative over helper signals. */
+  segmentConfig: Record<string,string>;
+  /** `redirect()` / `notFound()` reached on this route. A page that always redirects never renders. */
+  controlFlow: Array<{ kind: "redirect" | "permanent-redirect" | "not-found"; target: string | null; conditional: boolean }>;
+  /** How renderingMode was reached: read from the file, inherited from a directive, or defaulted because no signal was found. */
+  renderingBasis: "observed" | "directive" | "inherited" | "default";
 }
 
 export interface MemoryCandidate {
@@ -171,6 +177,22 @@ export interface SearchResult {
   commitSha: string | null;
   score: number;
   channels: string[];
+  confidence?:string|null;
+  qualityScore?:number|null;
+  evidenceCount?:number;
+  locatedEvidenceCount?:number;
+  repositorySha?:string|null;
+  relationCoverage?:number;
+  queryTypeBoost?:number;
+  exactAnchorMatch?:boolean;
+  channelRanks?:Partial<Record<"sql"|"fts"|"vector"|"graph",number>>;
+  canonicalEntity?:string;
+  duplicateIds?:number[];
+  sourceFiles?:string[];
+  ranking?:{
+    score:number;
+    features:{taskFit:number;relationCoverage:number;freshness:number;evidenceQuality:number;entitySpecificity:number;channelRelevance:number};
+  };
 }
 
 export interface RetrievalQuery {
@@ -179,5 +201,7 @@ export interface RetrievalQuery {
   memoryTypes?: MemoryType[];
   nextMajor?: number;
   route?: string;
+  intent: import("./retrieval/intent.js").TaskIntent;
+  intentConfidence: import("./retrieval/intent.js").IntentClassification["confidence"];
   channels: Array<"sql" | "fts" | "vector">;
 }

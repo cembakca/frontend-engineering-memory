@@ -69,23 +69,19 @@ Paylaşılan proje konfigürasyonu gerekiyorsa `config/claude-mcp.example.json` 
 
 | Araç | Ne zaman kullanılmalı | Varsayılan context maliyeti |
 | --- | --- | --- |
-| `memory_list_repositories` | Repository adı/SHA bilinmiyorsa | Çok küçük |
-| `memory_get_repository` | Sürüm, router, güncellik | Çok küçük |
-| `memory_list_routes` | Kesin route listesi | Küçük, structured |
-| `memory_get_route` | Tek route davranışı/evidence | Küçük |
-| `memory_dependencies` | API, env, package veya route dependency | Sınırlı liste |
-| `memory_search` | Açık uçlu teknik soru | 5 sonuç / 8.000 karakter |
-| `memory_changed_since` | Merge etkisi | 10.000 karakter bütçeli |
-| `memory_explain` | Cevap üretmek için grounded context pack | 5 sonuç / 8.000 karakter |
-| `memory_quality` | Coverage ve vector tamlığı | Çok küçük |
+| `memory_repository` | Repository verilmezse liste; verilirse profil ve indexed SHA | Çok küçük |
+| `memory_route` | Route verilmezse envanter; verilirse tek route davranışı/evidence | Küçük, structured |
+| `memory_context` | Lookup, dependency, flow, impact, debug, plan, verification, change-review, approved decision veya indexed-SHA sorusu | En çok 8.000 karakter |
 
-Araçların tamamı read-only'dir. `memory_explain` kendi başına ikinci bir LLM çağırmaz; çağıran Codex/Claude için kanıtlı küçük bir context pack hazırlar.
+Araçların tamamı read-only'dir. `memory_context` kendi başına ikinci bir LLM çağırmaz; sorunun intent'ini deterministik olarak planlar ve çağıran Codex/Claude için kanıtlı, bütçeli bir context pack hazırlar. `answerContract` fact, derived relation, inference, uncertainty, missing evidence ve hedefli source fallback ayrımını taşır. Operasyonel `quality`, `reconcile` ve index komutları agent-facing MCP yerine CLI'da kalır.
+
+Temporal kullanımda `atSha` tek indexed snapshot görünümünü seçer; `atSha` + `compareToSha` route/flow/config/API behavior diff üretir. Bu alanlar yalnız engine tarafından başarıyla indekslenmiş tam SHA'ları kabul eder. “Neden bunu seçtik?” soruları source code'a bakılarak cevaplanmaz; yalnız ADR/PR/issue/human-approved decision kaydı varsa `kind: decision` döner.
 
 ## 5. Kalıcı agent kuralı
 
 `config/AGENTS.memory.example.md` içeriğini hedef repository'nin `AGENTS.md` dosyasına ekleyin. Claude için aynı prensipleri `CLAUDE.md` içinde de kullanabilirsiniz. En önemli kural:
 
-> Önce exact MCP aracı, sonra gerekirse `memory_search(limit=5)`, en son yalnız evidence dosyaları. Bütün repository'yi tarama.
+> Exact envanter için `memory_repository`/`memory_route`; mühendislik sorusu için bir kez `memory_context`; `answerContract` kurallarını izle, belirsizlik kalırsa yalnız `answerContract.sourceFallback` dosyalarını aç. Bütün repository'yi tarama.
 
 ## 6. AI extraction neden ayrı?
 
