@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Context Engine — index readout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="eyebrow">Repository</div>
+      <div class="brand-name">Context&nbsp;Engine</div>
+    </div>
+    <nav id="projects" class="projects" aria-label="Indexed repositories"></nav>
+    <div class="rail-foot mono" id="railFoot"></div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="empty mono" id="boot">connecting to index…</div>
+  </main>
+</div>
+
+<template id="tpl-project">
+  <header class="masthead">
+    <div>
+      <div class="eyebrow" data-slot="eyebrow"></div>
+      <h1 data-slot="title"></h1>
+      <p class="thesis" data-slot="guidance"></p>
+    </div>
+    <div class="stamp mono" data-slot="stamp"></div>
+  </header>
+
+  <section class="metrics" data-slot="metrics"></section>
+
+  <section class="block">
+    <div class="block-head">
+      <div>
+        <div class="eyebrow">Instrument I — the index, projected</div>
+        <h2>Every fact, positioned by its own embedding</h2>
+      </div>
+      <div class="readout mono" data-slot="pcaNote"></div>
+    </div>
+    <p class="lede">Each point is one stored fact, placed by the principal components of its
+      384-dimension vector. Type a question to embed it and drop it into the same space, or click a
+      point to pull its nearest neighbours straight from sqlite-vec.</p>
+
+    <div class="instrument">
+      <div class="instrument-head">
+        <form class="search" data-slot="searchForm" autocomplete="off">
+          <input type="search" data-slot="searchInput" placeholder="embed a question and search the index…" aria-label="Vector search">
+          <button type="submit">Search</button>
+          <button type="button" data-slot="clearSearch" hidden>Clear</button>
+        </form>
+        <div class="readout mono" data-slot="shown"></div>
+      </div>
+      <div class="field">
+        <canvas data-slot="plot"></canvas>
+        <div class="panel">
+          <div>
+            <div class="eyebrow rail-label">Fact types</div>
+            <div class="legend" data-slot="legend"></div>
+          </div>
+          <div class="inspect" data-slot="inspect"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <div>
+        <div class="eyebrow">Instrument II — the traversal</div>
+        <h2>The part similarity cannot answer</h2>
+      </div>
+      <div class="readout mono" data-slot="graphNote"></div>
+    </div>
+    <p class="lede">Nearest neighbours find pieces. They cannot say what order those pieces run in,
+      or where the request leaves the browser. This is a real walk over the typed symbol graph.</p>
+
+    <div class="instrument">
+      <div class="instrument-head">
+        <label class="seed-pick mono">entry point
+          <select data-slot="seedSelect" aria-label="Flow entry point"></select>
+        </label>
+        <div class="readout mono" data-slot="flowNote"></div>
+      </div>
+      <ol class="steps mono" data-slot="steps"></ol>
+      <div class="trace-foot mono" data-slot="traceFoot"></div>
+    </div>
+  </section>
+</template>
+
+<script src="/ui/app.js"></script>
+</body>
+</html>

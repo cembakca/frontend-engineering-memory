@@ -266,6 +266,28 @@ MEMORY_AI_EXTRACTOR_URL=http://127.0.0.1:8080/extract \
 npm run memory -- ai-extract hangikredi.deposit.fe.next --file=src/app/page.tsx
 ```
 
+## Browser readout
+
+`serve` also hosts a read-only UI at the same port. It pages through every indexed repository and
+draws the index from live data — no fixture, no snapshot file.
+
+```bash
+pnpm serve        # http://127.0.0.1:4317
+```
+
+- **Projection** — every stored fact placed by the principal components of its own embedding.
+  The explained variance is printed next to the plot, because the picture is lossy and says so.
+- **Vector search** — a typed question is embedded server-side and matched against the index by
+  `sqlite-vec`; the similarities shown are the ones the retrieval path uses.
+- **Neighbours** — clicking a fact pulls its nearest neighbours from the vector table, not from a
+  similarity recomputed in the browser.
+- **Traversal** — a real walk over the typed symbol graph, with the client-to-server boundary marked
+  and helper detail pruned.
+
+Endpoints behind it: `/api/ui/projects`, `/api/ui/projection/:repository`,
+`/api/ui/neighbours/:repository?id=`, `/api/ui/vector-search/:repository?q=`, `/api/ui/flow/:repository`.
+Projections are cached per indexed SHA and rebuilt when the index moves.
+
 ## HTTP server
 
 ```bash
