@@ -17,22 +17,26 @@ const CATEGORY_RULES: Array<[RegExp, string, string]> = [
   [/(google-analytics|gtag|gtm|segment|adobe|analytics)/i, "analytics", "Analytics/tracking"],
 ];
 
-function classify(name: string): { category: string; purpose: string } | null {
-  if (name.startsWith("@hangikredi/")) return { category: "internal-package", purpose: "Internal company package" };
+function isInternalPackage(name:string,version:string,prefixes:string[]):boolean {
+  return /^(?:workspace:|file:|link:)/.test(version)||prefixes.some((prefix)=>prefix&&name.startsWith(prefix));
+}
+
+function classify(name:string,version:string,internalPackagePrefixes:string[]): { category: string; purpose: string } | null {
+  if (isInternalPackage(name,version,internalPackagePrefixes)) return { category: "internal-package", purpose: "Internal company package" };
   for (const [regex, category, purpose] of CATEGORY_RULES) {
     if (regex.test(name)) return { category, purpose };
   }
   return null;
 }
 
-export async function analyzePackageDependencies(repoPath: string): Promise<DependencyCandidate[]> {
+export async function analyzePackageDependencies(repoPath:string,internalPackagePrefixes:string[]=[]): Promise<DependencyCandidate[]> {
   const pkg = (await readJson<PackageJson>(path.join(repoPath, "package.json"))) ?? {};
   const merged = { ...(pkg.devDependencies ?? {}), ...(pkg.dependencies ?? {}) };
-  return Object.entries(merged).flatMap(([name]) => {
-    const c = classify(name);
+  return Object.entries(merged).flatMap(([name,version]) => {
+    const c = classify(name,version,internalPackagePrefixes);
     if (!c) return [];
     return [{
-      dependencyType: name.startsWith("@hangikredi/") ? "internal-package" as const : "npm" as const,
+      dependencyType: isInternalPackage(name,version,internalPackagePrefixes) ? "internal-package" as const : "npm" as const,
       name,
       category: c.category,
       purpose: c.purpose,
@@ -42,8 +46,8 @@ export async function analyzePackageDependencies(repoPath: string): Promise<Depe
   });
 }
 
-export async function analyzeRepositoryDependencies(repoPath:string):Promise<DependencyCandidate[]> {
-  const dependencies=await analyzePackageDependencies(repoPath);
+export async function analyzeRepositoryDependencies(repoPath:string,internalPackagePrefixes:string[]=[]):Promise<DependencyCandidate[]> {
+  const dependencies=await analyzePackageDependencies(repoPath,internalPackagePrefixes);
   const packageNames=new Set(dependencies.map((dependency)=>dependency.name));
   const seen=new Set(dependencies.map((dependency)=>`${dependency.dependencyType}\0${dependency.name}\0${dependency.sourceFile}`));
   const push=(candidate:DependencyCandidate):void=>{
@@ -53,7 +57,7 @@ export async function analyzeRepositoryDependencies(repoPath:string):Promise<Dep
   for (const sourceFile of await listAnalyzableSourceFiles(repoPath)) {
     const content=await readTextIfSmall(path.join(repoPath,sourceFile));
     if (content==null) continue;
-    const facts=extractSourceFacts(sourceFile,content);
+    const facts=extractSourceFacts(sourceFile,content,{internalPackagePrefixes});
     for (const signal of facts.dataSources) {
       push({dependencyType:"http",name:signal.value,category:"backend-api",purpose:`${signal.kind} data source`,runtime:"unknown",sourceFile,sourceSymbol:signal.symbol,startLine:signal.line});
     }

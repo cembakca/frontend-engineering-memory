@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { dbPath, loadRegistry, projectRoot } from "../config.js";
+import { loadRegistry, projectRoot } from "../config.js";
 import type { MemoryDatabase } from "../memory/database.js";
 import { MemoryStore } from "../memory/store.js";
 import { evaluateFreshness } from "../retrieval/freshness.js";
@@ -111,7 +111,7 @@ export async function evaluateRollout(
   const telemetry=new RetrievalTelemetry(memoryDb).report();
 
   let databaseBytes:number|null=null;
-  try { databaseBytes=(await stat(dbPath())).size; } catch { databaseBytes=null; }
+  try { databaseBytes=(await stat(memoryDb.filePath)).size; } catch { databaseBytes=null; }
   const perRepository=databaseBytes!=null&&currentCount>0 ? Math.round(databaseBytes/currentCount) : null;
   const latencyP95=telemetry.latencyMs?.p95 ?? null;
   const costFindings:string[]=[];

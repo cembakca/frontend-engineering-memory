@@ -1,6 +1,6 @@
 {
   "suite": "Revolt Next.js semantic retrieval pilot",
-  "repository": "hangikredi.revolt.fe.next",
+  "repository": "company.product.web.next",
   "targetSha": "70d08b9e09ea684aae9d4c2fa8d1fb8bc7718077",
   "baselineDiscovery": {
     "note": "A memory-less agent must first discover the source tree.",

@@ -13,7 +13,7 @@
 # block and every other uncommitted change stay exactly as they are.
 set -euo pipefail
 
-PILOT="${PILOT_REPO_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../hangikredi.aboutus.fe.next" && pwd)}"
+PILOT="${PILOT_REPO_PATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../company.web.next" && pwd)}"
 AGENTS="$PILOT/AGENTS.md"
 PARKED="$PILOT/.agents-memory-block.parked"
 

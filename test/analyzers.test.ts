@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { analyzeSourceFile, listAnalyzableSourceFiles } from "../src/analyzers/source-memory.js";
 import { analyzeProjectFile } from "../src/analyzers/project-memory.js";
+import { analyzePackageDependencies } from "../src/analyzers/dependencies.js";
 import { classifyFile } from "../src/sync/classifier.js";
 
 async function file(root:string,relative:string,content:string):Promise<void> {
@@ -19,6 +20,21 @@ test("classifies route, middleware, build, config and irrelevant changes",()=>{
   assert.deepEqual(classifyFile("Dockerfile").analyzers,["build","configuration"]);
   assert.deepEqual(classifyFile(".env.production").analyzers,["configuration","security"]);
   assert.equal(classifyFile("README.md").memoryRelevant,false);
+});
+
+test("classifies configured and local-protocol packages without a company-specific namespace",async()=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),"fem-dependencies-"));
+  try {
+    await file(root,"package.json",JSON.stringify({dependencies:{
+      "@company/ui":"^1.0.0",
+      "local-helpers":"workspace:*",
+      "axios":"^1.0.0",
+    }}));
+    const dependencies=await analyzePackageDependencies(root,["@company/"]);
+    assert.equal(dependencies.find((item)=>item.name==="@company/ui")?.dependencyType,"internal-package");
+    assert.equal(dependencies.find((item)=>item.name==="local-helpers")?.dependencyType,"internal-package");
+    assert.equal(dependencies.find((item)=>item.name==="axios")?.dependencyType,"npm");
+  } finally { await rm(root,{recursive:true,force:true}); }
 });
 
 test("produces missing P1 memory types with symbol and source ranges",async()=>{

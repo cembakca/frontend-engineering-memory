@@ -12,7 +12,7 @@ await configureTestNativeBinding();
 
 test("the checked-in fleet assigns both registered architecture representatives",async()=>{
   const file=fileURLToPath(new URL("../config/evaluation-fleet.json",import.meta.url));
-  const result=await validateEvaluationFleet(file,{registryRepositories:["hangikredi.aboutus.fe.next","hangikredi.revolt.fe.next"]});
+  const result=await validateEvaluationFleet(file,{registryRepositories:["company.web.next","company.product.web.next"]});
   assert.equal(result.validation.ok,true,result.validation.errors.join("\n"));
   assert.deepEqual(result.validation.suites.map((item)=>[item.role,item.cases]),
     [["representative",15],["representative",13]]);

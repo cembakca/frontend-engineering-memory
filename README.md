@@ -47,6 +47,7 @@ Configure one or more repositories:
       "path": "/absolute/path/to/company.web.next",
       "mainBranch": "main",
       "managedCheckout": false,
+      "internalPackagePrefixes": ["@company/"],
       "queryAliases": {
         "kullanıcının söylediği ürün terimi": ["SourceSymbol", "api-term"]
       }
@@ -58,6 +59,8 @@ Configure one or more repositories:
 Developer working trees should use `managedCheckout:false`. A service-owned clean clone may use `managedCheckout:true` with a configured remote. Dirty working trees are refused; the indexer never resets a developer checkout.
 
 `queryAliases` is optional. Each key and its values form a symmetric vocabulary group, allowing Turkish/product terminology to find differently named source symbols without changing the embedding model. Keep groups repository-specific and evidence-oriented; they are applied only when the query mentions a term in that group.
+
+`internalPackagePrefixes` is optional and replaces company-specific assumptions in the analyzer. Add only package-name prefixes owned by the organization; local `workspace:`, `file:`, and `link:` dependencies are recognized automatically.
 
 Create the first index and verify it:
 

@@ -50,6 +50,8 @@ export interface RepositoryConfig {
   remote?: string;
   /** Repository vocabulary groups used to bridge product language and source-code terminology. */
   queryAliases?: Record<string,string[]>;
+  /** Explicit package-name prefixes owned by the organization, for example `@company/`. */
+  internalPackagePrefixes?: string[];
 }
 
 export interface RepositoryRegistry {

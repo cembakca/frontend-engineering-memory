@@ -84,8 +84,8 @@ The checked-in families are:
 
 | Family | Representative | Shape |
 | --- | --- | --- |
-| `content-site` | `hangikredi.aboutus.fe.next` | Content-led App Router, static/ISR pages, forms, small gateway surface |
-| `product-app` | `hangikredi.revolt.fe.next` | Product-led App Router, React Query, auth, dynamic forms, broad route surface |
+| `content-site` | `company.web.next` | Content-led App Router, static/ISR pages, forms, small gateway surface |
+| `product-app` | `company.product.web.next` | Product-led App Router, React Query, auth, dynamic forms, broad route surface |
 
 A new family is justified only by a material architecture difference such as Pages/Hybrid Router, Server Actions as the primary mutation boundary, a different auth/session model, or another state/data-fetching topology. Product names alone do not create a new family.
 
@@ -188,7 +188,7 @@ Feedback closes the loop. Export actionable reports with `pnpm memory feedback e
 | RCE-I03 | `src/lib/menu.ts` değişirse hangi route'lar dolaylı etkilenir? | menu → SiteChrome → layout → active pages | Inheritance impact beklenir |
 | RCE-I04 | `SiteChrome.tsx` değişikliğinin route kapsamı nedir? | Component → layout → routes | Graph beklenir |
 | RCE-I05 | hCaptcha adapter değişirse hangi kullanıcı akışları ve API handler'lar risklidir? | Captcha graph + iki form + iki handler | Flow+impact pack |
-| RCE-I06 | `@hangikredi/tokens` major update'i hangi source'ları etkileyebilir? | Package/import occurrences | Exact import graph |
+| RCE-I06 | `@company/tokens` major update'i hangi source'ları etkileyebilir? | Package/import occurrences | Exact import graph |
 | RCE-I07 | CDN env veya assetPrefix değişikliği hangi görüntü/build yollarını etkiler? | next config + cdn-path + CdnImage | Config→symbol graph |
 | RCE-I08 | Tek bir legal HTML dosyasını değiştirirsem hangi public URL etkilenir? | Content file ↔ manifest slug ↔ `[slug]` | Ters mapping beklenir |
 

@@ -171,7 +171,7 @@ function routeParams(route: string): string[] {
   return [...route.matchAll(/\[+([^\]]+)\]+/g)].map((m) => m[1]!.replace(/^\.\.\./, ""));
 }
 
-export async function scanRoutes(repoPath: string): Promise<RouteRecord[]> {
+export async function scanRoutes(repoPath:string,options:{internalPackagePrefixes?:string[]}={}): Promise<RouteRecord[]> {
   const moduleGraph = await LocalModuleGraph.create(repoPath);
   const middleware=await analyzeMiddleware(repoPath);
   const ignoredPaths=await generatedOutputPaths(repoPath);
@@ -201,7 +201,7 @@ export async function scanRoutes(repoPath: string): Promise<RouteRecord[]> {
     const layoutChain = await layoutChainFor(repoPath, sourceFile, routerType);
     const behaviorFiles = await moduleGraph.reachableFrom([sourceFile,...layoutChain]);
     const ownRendering = detectRendering(content,routerType);
-    const ownFacts = extractSourceFacts(sourceFile,content);
+    const ownFacts = extractSourceFacts(sourceFile,content,options);
     const segmentConfig = ownFacts.segmentConfig;
     const controlFlow = ownFacts.controlFlow.map((signal)=>({kind:signal.kind,target:signal.target,conditional:signal.conditional}));
     // A page whose body always redirects never renders, so no helper signal can
@@ -228,7 +228,7 @@ export async function scanRoutes(repoPath: string): Promise<RouteRecord[]> {
 
     for (const behaviorFile of behaviorFiles) {
       const behaviorContent = (await readTextIfSmall(path.join(repoPath,behaviorFile))) ?? "";
-      const facts=extractSourceFacts(behaviorFile,behaviorContent);
+      const facts=extractSourceFacts(behaviorFile,behaviorContent,options);
       if (facts.clientBoundary) clientBoundaries.push(behaviorFile);
       for (const signal of facts.dataSources) {
         dataSources.push(signal.value);

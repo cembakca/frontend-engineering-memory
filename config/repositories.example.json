@@ -1,10 +1,11 @@
 {
   "repositories": [
     {
-      "name": "hangikredi.example.fe.next",
-      "path": "/absolute/path/to/hangikredi.example.fe.next",
+      "name": "company.web.next",
+      "path": "/absolute/path/to/company.web.next",
       "mainBranch": "main",
       "managedCheckout": false,
+      "internalPackagePrefixes": ["@company/"],
       "queryAliases": {
         "iletişim formu": ["ContactForm", "contact"],
         "abonelik": ["NewsletterForm", "subscribe", "subscription"]

@@ -1,6 +1,6 @@
 {
   "suite": "RCE-002 first-15 A/B baseline",
-  "repository": "hangikredi.aboutus.fe.next",
+  "repository": "company.web.next",
   "targetSha": "6d5978b3b82ea1734868a4b2ccf870f40e389d14",
   "baselineDiscovery": {
     "note": "A memory-less agent must first discover the tree. Measured once and added to every baseline read cost.",
@@ -267,7 +267,7 @@
       "job": "flow",
       "strict": false,
       "question": "Global menü hangi layout/component zinciriyle tüm sayfalara ulaşır?",
-      "strictFact": "layout.tsx getMenuList() -> SiteChrome(headerItems, footerItems) -> Header/Footer from @hangikredi/components on every route",
+      "strictFact": "layout.tsx getMenuList() -> SiteChrome(headerItems, footerItems) -> Header/Footer from @company/components on every route",
       "forbiddenClaims": [
         "per-page menu fetch",
         "middleware injects menu"

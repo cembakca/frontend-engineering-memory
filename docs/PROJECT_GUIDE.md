@@ -69,6 +69,7 @@ Mevcut benzer Next.js projeleri için iki aile vardır:
   "path": "/absolute/path/to/company.web.next",
   "mainBranch": "main",
   "managedCheckout": false,
+  "internalPackagePrefixes": ["@company/"],
   "queryAliases": {
     "ekibin kullandığı ürün terimi": ["SourceSymbol", "backend-term"]
   }
@@ -76,6 +77,7 @@ Mevcut benzer Next.js projeleri için iki aile vardır:
 ```
 
 - Geliştirici checkout'u için `managedCheckout:false` kullanın.
+- Kuruma ait npm scope/prefix varsa `internalPackagePrefixes` içine açıkça yazın; analyzer herhangi bir şirkete ait namespace'i hard-code etmez.
 - `queryAliases` zorunlu değildir. Yalnız ürün dilindeki terim ile source adı gerçekten farklıysa ekleyin.
 - Secret, token, kullanıcı verisi veya environment value eklemeyin.
 - Repository adı bütün komutlarda ve fleet manifestinde birebir aynı yazılmalıdır.

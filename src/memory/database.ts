@@ -10,6 +10,7 @@ import { resolveEmbeddingProfile, type EmbeddingProfile } from "./embedding-prof
 
 export class MemoryDatabase {
   readonly db: Database.Database;
+  readonly filePath:string;
   readonly vectorEnabled: boolean;
   readonly embeddingProfile:EmbeddingProfile;
   readonly vectorDimension:number;
@@ -17,12 +18,13 @@ export class MemoryDatabase {
   readonly vectorStore:VectorStore|null;
 
   constructor(file = dbPath()) {
+    this.filePath=path.resolve(file);
     this.embeddingProfile=resolveEmbeddingProfile();
     this.vectorDimension=this.embeddingProfile.dimension;
     this.vectorTableName=this.embeddingProfile.vectorTable;
-    mkdirSync(path.dirname(file), { recursive: true });
+    mkdirSync(path.dirname(this.filePath), { recursive: true });
     const nativeBinding = process.env.MEMORY_SQLITE_NATIVE_BINDING;
-    this.db = new Database(file,nativeBinding ? { nativeBinding } : undefined);
+    this.db = new Database(this.filePath,nativeBinding ? { nativeBinding } : undefined);
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA_SQL);
     this.applyMigrations();

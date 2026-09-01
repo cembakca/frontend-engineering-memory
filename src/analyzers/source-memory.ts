@@ -20,11 +20,15 @@ function firstLine(content: string, regex: RegExp): number | null {
   return match ? lineNumberAt(content, match.index) : null;
 }
 
-export async function analyzeSourceFile(repoPath: string, sourceFile: string): Promise<MemoryCandidate[]> {
+export async function analyzeSourceFile(
+  repoPath:string,
+  sourceFile:string,
+  options:{internalPackagePrefixes?:string[]}={},
+): Promise<MemoryCandidate[]> {
   const content = await readTextIfSmall(path.join(repoPath, sourceFile));
   if (!content) return [];
   const out: MemoryCandidate[] = [];
-  const facts=extractSourceFacts(sourceFile,content);
+  const facts=extractSourceFacts(sourceFile,content,options);
 
   for (const signal of facts.serverFunctions) {
     const relatedCalls=facts.dataSources.filter((item)=>item.symbol===signal.symbol).map((item)=>`${item.kind} ${item.value}`);

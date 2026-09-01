@@ -16,23 +16,23 @@
     {
       "id": "content-site",
       "description": "Content-led App Router projects with static/ISR pages, forms and a small gateway surface.",
-      "representativeRepository": "hangikredi.aboutus.fe.next"
+      "representativeRepository": "company.web.next"
     },
     {
       "id": "product-app",
       "description": "Product-led App Router projects with React Query, auth, dynamic forms and a broad route surface.",
-      "representativeRepository": "hangikredi.revolt.fe.next"
+      "representativeRepository": "company.product.web.next"
     }
   ],
   "repositories": [
     {
-      "repository": "hangikredi.aboutus.fe.next",
+      "repository": "company.web.next",
       "family": "content-site",
       "role": "representative",
       "suite": "context-engine-eval.json"
     },
     {
-      "repository": "hangikredi.revolt.fe.next",
+      "repository": "company.product.web.next",
       "family": "product-app",
       "role": "representative",
       "suite": "context-engine-eval.revolt.json"

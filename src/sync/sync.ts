@@ -32,13 +32,13 @@ function routeKey(route:Pick<RouteRecord,"route"|"sourceFile">):string { return 
 
 export async function fullIndex(config:RepositoryConfig,memoryDb:MemoryDatabase,options:SyncOptions={}):Promise<object> {
   const {head,profile,store,existing}=await baseline(config,memoryDb,options);
-  const routes=await scanRoutes(config.path);
-  const dependencies=await analyzeRepositoryDependencies(config.path);
+  const routes=await scanRoutes(config.path,{internalPackagePrefixes:config.internalPackagePrefixes});
+  const dependencies=await analyzeRepositoryDependencies(config.path,config.internalPackagePrefixes);
   const sourceFiles=await listAnalyzableSourceFiles(config.path);
   const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
   const projectFiles=await listProjectAnalysisFiles(config.path);
   const candidates:MemoryCandidate[]=[repositoryProfileMemory(profile),...routes.map(routeMemory),...dependencyMemories(dependencies)];
-  for (const file of sourceFiles) candidates.push(...await analyzeSourceFile(config.path,file));
+  for (const file of sourceFiles) candidates.push(...await analyzeSourceFile(config.path,file,{internalPackagePrefixes:config.internalPackagePrefixes}));
   for (const file of projectFiles) candidates.push(...await analyzeProjectFile(config.path,file));
   const prepared=await store.prepareMemories(config.path,canonicalizeMemories(candidates));
   const partition=existing ? store.partitionPreparedMemories(existing.id,prepared) : {reused:[],fresh:prepared};
@@ -75,7 +75,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   if (!existing || !fromSha) return fullIndex(config,memoryDb,options);
   const repositoryId=existing.id;
   if (fromSha===head) {
-    const routes=await scanRoutes(config.path);
+    const routes=await scanRoutes(config.path,{internalPackagePrefixes:config.internalPackagePrefixes});
     const sourceFiles=await listAnalyzableSourceFiles(config.path);
     const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
     store.transaction(()=>{
@@ -94,7 +94,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   const changes=await changedFiles(config.path,fromSha,head);
   const classified=changes.map((change)=>({...change,classification:classifyFile(change.path)}));
   const relevant=classified.filter((change)=>change.classification.memoryRelevant);
-  const routes=await scanRoutes(config.path);
+  const routes=await scanRoutes(config.path,{internalPackagePrefixes:config.internalPackagePrefixes});
   const snapshotFiles=await listAnalyzableSourceFiles(config.path);
   const graph=await extractSymbolGraph(config.path,snapshotFiles,routes.map((route)=>route.route));
   const changedPaths=new Set(changes.flatMap((change)=>change.previousPath ? [change.previousPath,change.path] : [change.path]));
@@ -104,13 +104,13 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
     for (const route of routes) affectedRouteKeys.add(routeKey(route));
   }
 
-  const dependencies=relevant.length ? await analyzeRepositoryDependencies(config.path) : null;
+  const dependencies=relevant.length ? await analyzeRepositoryDependencies(config.path,config.internalPackagePrefixes) : null;
   const candidates:MemoryCandidate[]=[];
   if (relevant.some((change)=>change.classification.analyzers.includes("repository"))) candidates.push(repositoryProfileMemory(profile));
   if (dependencies) candidates.push(...dependencyMemories(dependencies));
   for (const change of relevant) {
     if (change.status.startsWith("D") || !(await exists(path.join(config.path,change.path)))) continue;
-    if (SOURCE_EXT.test(change.path)) candidates.push(...await analyzeSourceFile(config.path,change.path));
+    if (SOURCE_EXT.test(change.path)) candidates.push(...await analyzeSourceFile(config.path,change.path,{internalPackagePrefixes:config.internalPackagePrefixes}));
     if (change.classification.analyzers.includes("build") || change.classification.analyzers.includes("configuration")) candidates.push(...await analyzeProjectFile(config.path,change.path));
   }
   const affectedRoutes=routes.filter((route)=>affectedRouteKeys.has(routeKey(route)));

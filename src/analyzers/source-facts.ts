@@ -235,7 +235,11 @@ function nodeAtPosition(source:ts.SourceFile,position:number):ts.Node {
   return best;
 }
 
-export function extractSourceFacts(sourceFile: string, content: string): SourceFacts {
+export function extractSourceFacts(
+  sourceFile: string,
+  content: string,
+  options:{internalPackagePrefixes?:string[]}={},
+): SourceFacts {
   const source=ts.createSourceFile(sourceFile,content,ts.ScriptTarget.Latest,true,sourceFile.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const facts: SourceFacts={
     controlFlow:[],segmentConfig:{},
@@ -388,7 +392,7 @@ export function extractSourceFacts(sourceFile: string, content: string): SourceF
       const value=node.moduleSpecifier.text;
       const signal=located(source,node,value);
       pushUnique(facts.imports,signal,(item)=>item.value);
-      if (value.startsWith("@hangikredi/")) {
+      if ((options.internalPackagePrefixes ?? []).some((prefix)=>prefix&&value.startsWith(prefix))) {
         const packageName=value.split("/").slice(0,2).join("/");
         pushUnique(facts.internalPackages,{...signal,value:packageName},(item)=>item.value);
       }
