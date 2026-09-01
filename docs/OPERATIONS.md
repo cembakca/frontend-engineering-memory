@@ -4,6 +4,44 @@ The service keeps multiple Next.js repositories in one database while preserving
 
 Yeni repository ekleme ve mevcut repository'yi yeni commit'e taşıma işlemlerinin copy/paste edilebilir sırası için [Project lifecycle guide](PROJECT_GUIDE.md) dokümanını kullanın. Bu sayfa servis modu, rollout, CI, backup ve troubleshooting ayrıntılarına odaklanır.
 
+## The registry is the only file you edit
+
+`config/repositories.json` is the source of truth, and `serve` acts on it. The file is watched, so a
+save is the whole operation — no command follows it:
+
+| You do | The service does |
+| --- | --- |
+| Add an entry with a `url` | Clones it and runs a first full index |
+| Add an entry with a `path` | Indexes that checkout |
+| Remove an entry | Retires the repository: it leaves the UI, MCP and retrieval, and its rows are kept |
+| Re-add an entry you removed | Restores it as it was, without re-indexing |
+| Change nothing | Nothing |
+
+The watch settles *membership* only. It does not pull commits for repositories that are already
+indexed: that is the webhook's job, and a registry edit re-indexing unrelated projects would be a
+surprise. It also means a repository whose CI trigger was never wired up stays visibly stale instead
+of being quietly kept fresh by a fallback.
+
+Removal retires rather than deletes, because a registry edit is easy to get wrong and a typo should
+not destroy an index. `pnpm memory registry-retired` lists what is retired and
+`pnpm memory registry-retired --purge=<name>` reclaims the space once you are sure.
+
+One broken entry never blocks the others: it is reported and the rest of the pass continues.
+
+Run the same reconciliation by hand at any time:
+
+```bash
+pnpm memory registry-sync                 # add, sync, retire
+pnpm memory registry-sync --only-new      # index newly added entries, skip commit checks
+pnpm memory registry-sync --no-retire     # never retire, whatever the registry says
+```
+
+`MEMORY_REGISTRY_WATCH=0` turns the watch off.
+
+`MEMORY_RECONCILE_INTERVAL_MINUTES` adds a periodic pass that *does* check for new commits. It is off
+by default and should stay off where CI posts to the webhook: a polling fallback would mask a
+repository whose pipeline was never connected, which is exactly the failure you want to see.
+
 ## Repository modes
 
 Use `managedCheckout:false` for a developer working tree:
@@ -122,6 +160,52 @@ The scheduler is a safety net. A CI sync after each main merge gives lower fresh
 ## CI
 
 Examples live under `ci/`. For HTTP-triggered indexing, send the full expected 40-character commit SHA. The server rejects ambiguous or stale commit expectations.
+
+### Webhook
+
+`POST /webhook` is the endpoint to point CI or a Git host at. It takes the commit from the payload —
+never from whatever the checkout currently happens to be on — so a delivery can only index what the
+sender named.
+
+**Authentication.** Set `MEMORY_WEBHOOK_SECRET` before exposing the service. Any one of these is
+accepted, compared in constant time:
+
+| Header | Sender |
+| --- | --- |
+| `X-Gitlab-Token: <secret>` | GitLab |
+| `X-Hub-Signature-256: sha256=<hmac>` | GitHub (HMAC of the raw body) |
+| `X-Memory-Token: <secret>` or `Authorization: Bearer <secret>` | Jenkins, curl, anything else |
+
+Without the secret set, only loopback callers are accepted. An unauthenticated endpoint reachable
+from the network would let anyone queue indexing work, so it refuses rather than trusting a
+well-formed request.
+
+**Payloads.** GitLab push, GitHub push, and a plain `{"repository","commit"}` body all work. When the
+payload carries a clone URL, the repository is matched against the registry `url` — so a Git host
+webhook needs no knowledge of the names this service uses. `?repository=` and `?commit=` override.
+
+**Responses.**
+
+| Status | Meaning |
+| --- | --- |
+| `202` + `mode:"queued"` | Accepted; indexing runs in the background |
+| `202` + `accepted:false` | Deliberate skip, e.g. a push to a branch this repository is not indexed from |
+| `200` | Only with `?wait=1`; the body carries the sync result |
+| `401` | Missing or wrong credential |
+| `404` | Payload matched no registered repository |
+
+Queued is the default because indexing takes minutes and a Git host times out long before that. Use
+`?wait=1` from a pipeline that should fail when the index fails.
+
+The same repository and commit is never indexed twice concurrently: a delivery that arrives while its
+own sync is still running joins the run in flight.
+
+```bash
+curl --fail -X POST "$FRONTEND_MEMORY_URL/webhook?wait=1" \
+  -H 'content-type: application/json' \
+  -H "x-memory-token: $MEMORY_WEBHOOK_SECRET" \
+  -d "{\"repository\":\"company.web.next\",\"commit\":\"$GIT_COMMIT\"}"
+```
 
 ### Jenkins on merge to main
 

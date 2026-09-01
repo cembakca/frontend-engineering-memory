@@ -75,7 +75,13 @@ function unique<T>(values:T[]):T[] { return [...new Set(values)]; }
 
 function anchorsOf(raw:string,route?:string):QueryAnchors {
   const files=unique([...raw.matchAll(/(?:[\w@.()\[\]-]+\/)+[\w@.()\[\]-]+\.(?:[cm]?[jt]sx?|json|html|css|scss|md)/gi)].map((match)=>match[0]));
-  const symbols=unique([...raw.matchAll(/(?:[\w@.()\[\]/-]+\.[cm]?[jt]sx?)#[A-Za-z_$][\w$]*/g)].map((match)=>match[0]));
+  const qualifiedSymbols=[...raw.matchAll(/(?:[\w@.()\[\]/-]+\.[cm]?[jt]sx?)#[A-Za-z_$][\w$]*/g)].map((match)=>match[0]);
+  // Bare code identifiers are high-signal anchors in natural implementation
+  // questions (for example `getInterestOppList`). Restrict this to camel/Pascal
+  // case so ordinary prose does not accidentally become a graph seed.
+  const bareSymbols=[...raw.matchAll(/\b[a-z][A-Za-z0-9_$]*[A-Z][A-Za-z0-9_$]*\b/g)]
+    .map((match)=>match[0]).filter((value)=>!CONFIG_STOP.has(value));
+  const symbols=unique([...qualifiedSymbols,...bareSymbols]);
   const config=unique([...raw.matchAll(/\b[A-Z][A-Z0-9_]{2,}\b/g)].map((match)=>match[0]).filter((key)=>!CONFIG_STOP.has(key)));
   return {route,files,symbols,config};
 }

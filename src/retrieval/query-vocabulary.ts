@@ -95,13 +95,30 @@ export function matchingQueryAliases(raw:string,groups:QueryAliases[]):string[] 
 
 /** Resolve a matched vocabulary group to a real static route identity. */
 export function matchingAliasRoute(raw:string,groups:QueryAliases[],routes:string[]):string|undefined {
-  const terms=matchingQueryAliases(raw,groups).map(fold);
-  if (!terms.length) return undefined;
+  const query=fold(raw);
+  const directGroups=groups.flatMap((group)=>Object.entries(group).map(([canonical,aliases])=>{
+    const terms=[canonical,...aliases];
+    const mentioned=terms.filter((term)=>containsPhrase(query,fold(term)));
+    return {canonical,terms,mentioned,canonicalMentioned:containsPhrase(query,fold(canonical))};
+  })).filter((group)=>group.mentioned.length);
   const candidates=routes.filter((route)=>!route.includes("[")).map((route)=>({
     route,
     path:fold(route.replace(/^\//,"")),
+    readablePath:fold(route.replace(/^\//,"").replace(/[-_/]+/g," ")),
     segments:route.split("/").filter(Boolean).map(fold),
   }));
+  const direct=directGroups.flatMap((group)=>{
+    const canonical=fold(group.canonical);
+    const route=candidates.find((candidate)=>candidate.path===canonical||candidate.readablePath===canonical)
+      ?? candidates.find((candidate)=>candidate.segments.includes(canonical));
+    if (!route) return [];
+    const longestMention=Math.max(...group.mentioned.map((term)=>fold(term).length));
+    return [{route:route.route,score:(group.canonicalMentioned ? 10_000 : 0)+(group.mentioned.some((term)=>fold(term)===query) ? 5_000 : 0)+longestMention}];
+  }).sort((a,b)=>b.score-a.score||a.route.localeCompare(b.route));
+  if (direct[0]) return direct[0].route;
+
+  const terms=matchingQueryAliases(raw,groups).map(fold);
+  if (!terms.length) return undefined;
   return candidates.find((candidate)=>terms.includes(candidate.path))?.route
     ?? candidates.find((candidate)=>candidate.segments.some((segment)=>terms.includes(segment)))?.route;
 }

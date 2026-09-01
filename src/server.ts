@@ -9,11 +9,12 @@ import { AnswerFeedback } from "./telemetry/answer-feedback.js";
 import { RetrievalTelemetry } from "./telemetry/retrieval-telemetry.js";
 import { hybridSearch } from "./retrieval/search.js";
 import { fullIndex, incrementalSync } from "./sync/sync.js";
-import { startReconciliationScheduler } from "./sync/reconcile.js";
+import { startRegistrySupervisor } from "./sync/supervisor.js";
 import { evaluateFreshness } from "./retrieval/freshness.js";
 import { extractSymbolGraph } from "./analyzers/symbol-graph.js";
 import { routeEntriesFrom, traceFlow } from "./retrieval/flow.js";
 import { createMemoryMcpHttpHandler } from "./mcp/server.js";
+import { authenticateWebhook, parseWebhook, WebhookError } from "./webhook.js";
 import { ProjectionCache } from "./ui/projection.js";
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
@@ -21,12 +22,19 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body,null,2));
 }
 
-async function body(req: http.IncomingMessage): Promise<any> {
+async function rawBody(req: http.IncomingMessage): Promise<string> {
   const chunks: Buffer[]=[];
   for await (const chunk of req) chunks.push(Buffer.from(chunk));
-  if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  return Buffer.concat(chunks).toString("utf8");
 }
+
+async function body(req: http.IncomingMessage): Promise<any> {
+  const text=await rawBody(req);
+  return text ? JSON.parse(text) : {};
+}
+
+/** Sync runs already in flight, so the same commit is not indexed twice concurrently. */
+const inFlight=new Map<string,Promise<unknown>>();
 
 const UI_TYPES:Record<string,string>={".html":"text/html; charset=utf-8",".css":"text/css; charset=utf-8",
   ".js":"text/javascript; charset=utf-8",".svg":"image/svg+xml",".json":"application/json; charset=utf-8"};
@@ -174,6 +182,40 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
         const repo=store.getRepository(decodeURIComponent(profileMatch[1]!));
         return repo ? json(res,200,repo) : json(res,404,{error:"repository not found"});
       }
+      // ---- CI / Git host webhook ----
+      if (req.method === "POST" && url.pathname === "/webhook") {
+        const text=await rawBody(req);
+        try {
+          authenticateWebhook({headers:req.headers,rawBody:text,remoteAddress:req.socket.remoteAddress});
+          let payload:unknown;
+          try { payload=text ? JSON.parse(text) : {}; }
+          catch { throw new WebhookError("Body is not valid JSON",400); }
+
+          const intent=await parseWebhook(payload,url.searchParams);
+          const config=await getRepositoryConfig(intent.repository);
+          const key=`${intent.repository}@${intent.commit}`;
+          const started=inFlight.get(key)
+            ?? enqueue(()=>incrementalSync(config,memoryDb,{expectedCommit:intent.commit}))
+              .finally(()=>inFlight.delete(key));
+          inFlight.set(key,started);
+
+          // Indexing can take minutes; a Git host will time out long before that.
+          // `?wait=1` is for a pipeline that wants its build to fail on a bad index.
+          if (url.searchParams.get("wait")==="1") {
+            return json(res,200,{accepted:true,...intent,result:await started});
+          }
+          started.catch((error)=>console.error(`[memory] webhook sync failed for ${key}: ${(error as Error).message}`));
+          return json(res,202,{accepted:true,...intent,mode:"queued",
+            note:"Indexing runs in the background. Add ?wait=1 to receive the result instead."});
+        } catch (error) {
+          if (error instanceof WebhookError) {
+            // 202 is how a deliberate skip is reported: the delivery was fine, the branch was not ours.
+            return json(res,error.status,{accepted:false,reason:error.message});
+          }
+          return json(res,500,{accepted:false,reason:(error as Error).message});
+        }
+      }
+
       if (req.method === "POST" && (url.pathname === "/sync" || url.pathname === "/full-index")) {
         const payload=await body(req);
         if (!payload.repository) return json(res,400,{error:"repository is required"});
@@ -188,11 +230,12 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
       json(res,500,{error:(error as Error).message});
     }
   });
-  const stopScheduler=startReconciliationScheduler(memoryDb,enqueue);
+  const stopScheduler=startRegistrySupervisor(memoryDb,enqueue);
   server.on("close",()=>{ stopScheduler(); void mcp.close(); });
   server.listen(port,host,()=>{
     console.log(`[memory] server listening on http://${host}:${port}`);
     console.log(`[memory] browser readout http://${host}:${port}/  ·  MCP endpoint http://${host}:${port}/mcp`);
+    console.log(`[memory] webhook http://${host}:${port}/webhook${process.env.MEMORY_WEBHOOK_SECRET ? "" : "  (loopback only until MEMORY_WEBHOOK_SECRET is set)"}`);
   });
   return server;
 }

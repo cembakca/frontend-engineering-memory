@@ -24,7 +24,7 @@ function failure(error:unknown) {
 
 function readOnly() { return {readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}; }
 
-export const MCP_INSTRUCTIONS="Use memory_repository for exact repository inventory and cross-repository package links. Use memory_route without repository to locate a route across the indexed fleet, then with repository for its exact behavior and dependencies. Turkish/Unicode route aliases are normalized for lookup. Use memory_context once for engineering questions. Use atSha for an indexed historical view and compareToSha for behavior diff; why/rationale answers require approved decisions. Follow answerContract; open only its sourceFallback files when uncertainty remains. All tools are read-only.";
+export const MCP_INSTRUCTIONS="For every route, route-source, page-location, or rendering question, call memory_route before source search; its route input accepts either a known /path or the user's natural page/product wording. A fresh, non-truncated summary containing the requested route, sourceFile, rendering, and renderingEvidence is sufficient: answer directly without reopening source. Use memory_repository for repository inventory and cross-repository package links. Request memory_route detail=runtime, dependencies, or full only when the question needs it. Turkish/Unicode aliases are normalized. Use memory_context once for other engineering questions; follow answerContract and open only sourceFallback files when uncertainty remains. Historical/rationale rules still apply. All tools are read-only.";
 
 export function createMemoryMcpServer(memoryDb=new MemoryDatabase()):McpServer {
   const tools=new MemoryTools(memoryDb);
@@ -42,13 +42,14 @@ export function createMemoryMcpServer(memoryDb=new MemoryDatabase()):McpServer {
   },async({repository})=>{ try { return output(repository ? tools.repository(repository) : tools.repositories()); } catch(error) { return failure(error); } });
 
   server.registerTool("memory_route",{
-    title:"List, locate or get routes",description:"Repository is optional for fleet-wide discovery. Without route, list active routes. With route, normalize Unicode/Turkish aliases and return matching repositories; with repository, return exact behavior, evidence and dependencies.",
-    inputSchema:z.object({repository:z.string().min(1).optional(),route:z.string().startsWith("/").optional(),limit:z.number().int().min(1).max(100).default(50)}),annotations:readOnly(),
-  },async({repository,route,limit})=>{ try { return output(route ? tools.route(repository,route) : tools.routes(repository,limit)); } catch(error) { return failure(error); } });
+    title:"List, locate or get routes",description:"Repository is optional for fleet-wide discovery. Route accepts either a known /path or a natural product/page name resolved through repository aliases. Exact lookup defaults to a bounded route/source/rendering summary.",
+    inputSchema:z.object({repository:z.string().min(1).optional(),route:z.string().min(2).optional(),limit:z.number().int().min(1).max(100).default(50),
+      detail:z.enum(["summary","runtime","dependencies","full"]).default("summary"),maxChars:z.number().int().min(500).max(24000).default(8000)}),annotations:readOnly(),
+  },async({repository,route,limit,detail,maxChars})=>{ try { return output(route ? tools.route(repository,route,{detail,maxChars}) : tools.routes(repository,limit,maxChars)); } catch(error) { return failure(error); } });
 
   server.registerTool("memory_context",{
-    title:"Compile task context",description:"Return one bounded pack for lookup, flow, impact, debug, implementation, verification, change review, approved decisions, an indexed SHA, or behavior diff between two indexed SHAs.",
-    inputSchema:z.object({question:z.string().min(2),repository:z.string().min(1),types:z.array(z.enum(memoryTypes)).max(8).optional(),maxChars:z.number().int().min(1000).max(24000).default(8000),since:z.string().regex(/^[0-9a-f]{40}$/i).optional(),atSha:z.string().regex(/^[0-9a-f]{40}$/i).optional(),compareToSha:z.string().regex(/^[0-9a-f]{40}$/i).optional()}),annotations:readOnly(),
+    title:"Compile task context",description:"Call once before source search for flow, impact, debug, implementation, verification, change review, approved decisions, an indexed SHA, or behavior diff. Returns an evidence-linked bounded pack and answer contract; omit maxChars to let the engine choose its budget.",
+    inputSchema:z.object({question:z.string().min(2),repository:z.string().min(1),types:z.array(z.enum(memoryTypes)).max(8).optional(),maxChars:z.number().int().min(1000).max(24000).optional(),since:z.string().regex(/^[0-9a-f]{40}$/i).optional(),atSha:z.string().regex(/^[0-9a-f]{40}$/i).optional(),compareToSha:z.string().regex(/^[0-9a-f]{40}$/i).optional()}),annotations:readOnly(),
   },async({question,repository,types,maxChars,since,atSha,compareToSha})=>{ try { return output(await tools.context(question,{repository,types,maxChars,since,atSha,compareToSha})); } catch(error) { return failure(error); } });
 
   return server;

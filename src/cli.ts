@@ -8,6 +8,7 @@ import { startServer } from "./server.js";
 import { fullIndex, incrementalSync } from "./sync/sync.js";
 import { runAiExtraction } from "./sync/ai-extract.js";
 import { reconcileAll } from "./sync/reconcile.js";
+import { reconcileRegistry } from "./sync/supervisor.js";
 import { runContextEvaluation } from "./retrieval/context-eval.js";
 import { runEvaluationFleet, scaffoldEvaluationOverlay } from "./retrieval/evaluation-fleet.js";
 import { runContextEconomy } from "./retrieval/context-economy.js";
@@ -126,6 +127,22 @@ async function main(): Promise<void> {
       }
       console.log(JSON.stringify(results,null,2));
       if (results.some((item)=>!item.ok)) process.exitCode=1;
+    } else if (command === "registry-sync") {
+      const outcomes=await reconcileRegistry(memoryDb,{
+        retireMissing:!args.includes("--no-retire"),
+        syncExisting:!args.includes("--only-new"),
+      });
+      console.log(JSON.stringify(outcomes,null,2));
+      if (outcomes.some((item)=>item.action==="failed")) process.exitCode=1;
+    } else if (command === "registry-retired") {
+      const purge=args.find((item)=>item.startsWith("--purge="))?.slice(8);
+      if (purge) {
+        const removed=store.purgeRepository(purge);
+        console.log(JSON.stringify({purged:removed,repository:purge,
+          ...(removed ? {} : {reason:"not found, or still listed in the registry"})},null,2));
+      } else {
+        console.log(JSON.stringify({retired:store.listRetiredRepositories()},null,2));
+      }
     } else if (command === "reconcile-all") {
       const results=await reconcileAll(memoryDb);
       console.log(JSON.stringify(results,null,2));

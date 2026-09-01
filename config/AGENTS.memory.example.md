@@ -1,7 +1,8 @@
 ## Frontend Engineering Memory
 
 - Before scanning source broadly, use the `frontend-memory` MCP server.
-- Use `memory_repository` for repository inventory/profile and `memory_route` for route inventory or one exact route.
+- Use `memory_repository` for repository inventory/profile and `memory_route` for route inventory or one exact route. Exact lookup defaults to the bounded `summary`; request `detail: runtime`, `dependencies`, or `full` only when the question requires that surface.
+- A fresh, non-truncated exact route summary with the requested route, source, rendering and rendering evidence is memory-sufficient. Answer from it without opening source merely to re-verify the same facts.
 - For dependency, flow, impact, debug, implementation, verification, change-review or open-ended questions call `memory_context` once with `maxChars: 8000`.
 - Follow `answerContract`: cite facts, qualify derived relations as static analysis, and label inferences explicitly. Open only `answerContract.sourceFallback` files when uncertainty remains.
 - For historical truth pass an indexed `atSha`; add `compareToSha` only for behavior diff. Never treat an arbitrary, unindexed Git commit as an indexed snapshot.

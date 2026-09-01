@@ -40,6 +40,11 @@ function isRepositoryDependencyQuestion(question:string):boolean {
     || /(?:repo|repository).{0,30}(?:bağımlı|bağımlılık|kullanıyor|tüketiyor)|(?:bağımlı|bağımlılık).{0,30}(?:repo|repository)/i.test(question);
 }
 
+function isDataFlowQuestion(question:string):boolean {
+  return /\b(data|fetch|endpoint|service chain)\b/i.test(question)
+    || /(?:ürün|sayfa).{0,30}(?:veri(?:si|sini)?|servis zinciri)|(?:veri|servis zinciri).{0,30}(?:nereden|akış|alır|getirir)/i.test(question);
+}
+
 /**
  * Outgoing behavioural edges by node, so seed scoring can look at what a
  * candidate actually reaches. `exports` is excluded on purpose: it would give a
@@ -88,8 +93,18 @@ function resolveSeed(question:string,edges:GraphEdge[],explicit:string[],mode:"f
   const queryTerms=new Set(terms(question));
 
   if (explicit.length) {
-    const exact=explicit.find((value)=>edges.some((edge)=>edge.from===value||edge.to===value||edge.from.startsWith(`${value}#`)||edge.to.startsWith(`${value}#`)
-      ||(value.startsWith("/")&&(routesEquivalent(edge.from,value)||routesEquivalent(edge.to,value)))));
+    const exact=explicit.flatMap((value)=>{
+      const direct=edges.some((edge)=>edge.from===value||edge.to===value||edge.from.startsWith(`${value}#`)||edge.to.startsWith(`${value}#`)
+        ||(value.startsWith("/")&&(routesEquivalent(edge.from,value)||routesEquivalent(edge.to,value))));
+      if (direct) return [value];
+      // Natural questions often name a bare exported function instead of the
+      // `file#symbol` graph key. Resolve it only when it is unambiguous.
+      if (!value.includes("/")&&!value.includes("#")) {
+        const nodes=[...new Set(edges.flatMap((edge)=>[edge.from,edge.to]))].filter((node)=>node.endsWith(`#${value}`));
+        if (nodes.length===1) return nodes;
+      }
+      return [];
+    })[0];
     if (exact) {
       if (mode==="impact") return exact;
       // A file is not a traversal entry point; descend to the symbols it declares.
@@ -97,6 +112,8 @@ function resolveSeed(question:string,edges:GraphEdge[],explicit:string[],mode:"f
       const holders=[...outgoing.keys()].filter((key)=>key.startsWith(`${exact}#`));
       if (holders.length===1) return holders[0]!;
       if (holders.length) {
+        const pageEntry=holders.find((key)=>key.endsWith("#Page"));
+        if (pageEntry&&!/\b(?:metadata|seo|generateMetadata)\b/i.test(question)) return pageEntry;
         const best=holders
           .map((key)=>({key,score:reachWithin(outgoing,key,2).filter((node)=>terms(node).some((term)=>queryTerms.has(term))).length}))
           .sort((a,b)=>b.score-a.score||a.key.localeCompare(b.key))[0];
@@ -151,7 +168,7 @@ export class TaskContextCompiler {
   }
 
   async compile(question:string,options:{repository:string;types?:MemoryType[];maxChars?:number;since?:string;atSha?:string;compareToSha?:string;freshness?:Record<string,unknown>}):Promise<any> {
-    const maxChars=Math.max(1_000,Math.min(24_000,options.maxChars ?? 8_000));
+    let maxChars=Math.max(1_000,Math.min(24_000,options.maxChars ?? 8_000));
     // Part of the pack, so it is budgeted with the pack rather than appended after.
     const freshness=options.freshness;
     if (options.compareToSha&&!options.atSha) throw new Error("compareToSha requires atSha as the behavior-diff base");
@@ -159,6 +176,15 @@ export class TaskContextCompiler {
     if (options.atSha) return this.temporal.contextAtSha(options.repository,options.atSha,question,maxChars);
     if (isDecisionQuestion(question)) return buildDecisionContext(this.store,options.repository,question,maxChars);
     const plan=planQuery(question,{repo:options.repository,memoryTypes:options.types});
+    if (options.maxChars==null) {
+      const automaticBudget:Partial<Record<typeof plan.intent,number>>={
+        // General ordered flows can legitimately cross validation, a route
+        // boundary and gateway config. Data-focused flows still self-prune to a
+        // much smaller payload, so keeping the general ceiling avoids recall loss.
+        lookup:3_000,"explain-flow":8_000,impact:4_500,"implementation-plan":5_500,debug:4_500,verify:3_000,"change-review":5_000,unknown:3_000,
+      };
+      maxChars=Math.min(maxChars,automaticBudget[plan.intent] ?? maxChars);
+    }
     const repositoryStrategy=isRepositoryStrategyQuestion(question);
     const repository=this.store.getRepository(options.repository);
     if (!repository) throw new Error(`Repository not found: ${options.repository}`);
@@ -243,14 +269,24 @@ export class TaskContextCompiler {
       // lexical match when semantic retrieval put it first. Other ranked symbols
       // are only a last resort; menu/data helpers must not displace layout flows.
       const topHandler=ranked[0]?.sourceSymbol==="handleSubmit" ? rankedSymbols[0] : undefined;
+      const clientEntry=/\b(?:client|browser|csr)\b/i.test(question)
+        ? ranked.find((item)=>/(?:^|\/)client\.[cm]?[jt]sx?$/i.test(item.sourceFile ?? ""))?.sourceFile
+        : undefined;
       const seed=(topHandler ? resolveSeed(question,semantic.edges,[topHandler],"flow") : null)
+        ?? (clientEntry ? resolveSeed(question,semantic.edges,[clientEntry],"flow") : null)
         ?? resolveSeed(question,semantic.edges,explicit,"flow")
         ?? resolveSeed(question,semantic.edges,rankedSymbols.slice(0,3),"flow");
       if (!seed) return compileContextPack({freshness,kind:"flow",query:question,repository:options.repository,snapshotSha,
         trace:{seed:"unresolved",steps:[],endpoints:[],config:[],prunedSteps:0,truncated:false},gaps:["flow seed could not be resolved"],sourceFallback:fallbackFiles},{maxChars});
       const routeFiles=new Map(semantic.routes.map((route)=>[route.route,route.sourceFile]));
+      const routeEntries=routeEntriesFrom(semantic.edges,routeFiles);
+      const focused=isDataFlowQuestion(question) ? traceFlow(semantic.edges,seed,{routeEntries,focus:"data"}) : null;
+      // Some repositories hide the actual HTTP boundary behind an unanalyzable
+      // SDK. In that case retain the ordinary service chain instead of returning
+      // an empty focused pack.
+      const trace=focused?.steps.length ? focused : traceFlow(semantic.edges,seed,{routeEntries,focus:"all"});
       return compileContextPack({freshness,kind:"flow",query:question,repository:options.repository,snapshotSha,
-        trace:traceFlow(semantic.edges,seed,{routeEntries:routeEntriesFrom(semantic.edges,routeFiles)}),sourceFallback:fallbackFiles},{maxChars});
+        trace,sourceFallback:trace.steps.length&&!trace.truncated ? [] : fallbackFiles},{maxChars});
     }
 
     if (plan.intent==="impact") {
@@ -262,7 +298,11 @@ export class TaskContextCompiler {
     }
 
     const verification=await extractVerificationGraph(semantic.repoPath,semantic.files,{routes:semantic.routes,
-      targets:semantic.routes.map((route)=>({key:route.route,kind:"route",file:route.sourceFile}))});
+      // Repository-level test/build strategy needs package/CI facts and global
+      // gaps. Per-route missing-test gaps are irrelevant and previously crowded
+      // the useful package.json evidence out of the bounded response.
+      targets:plan.intent==="verify"&&repositoryStrategy ? []
+        : semantic.routes.map((route)=>({key:route.route,kind:"route",file:route.sourceFile}))});
 
     if (plan.intent==="implementation-plan"||plan.intent==="verify") {
       const seed=resolveSeed(question,semantic.edges,explicit,"impact");

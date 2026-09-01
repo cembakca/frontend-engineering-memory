@@ -27,6 +27,11 @@ test("exposes bounded read-only memory tools over MCP",async()=>{
     const insertRoute=memoryDb.db.prepare("INSERT INTO routes(repository_id,route,route_type,router_type,source_file,rendering_mode,last_seen_sha) VALUES(?,?,?,?,?,?,?)");
     insertRoute.run(1,"/hakkimizda","page","app","src/app/hakkimizda/page.tsx","static","a".repeat(40));
     insertRoute.run(2,"/hakkımızda","page","app","src/app/hakkımızda/page.tsx","static","b".repeat(40));
+    memoryDb.db.prepare("UPDATE routes SET evidence_json=?,client_boundaries_json=? WHERE repository_id=1 AND route='/hakkimizda'")
+      .run(JSON.stringify(["src/app/hakkimizda/page.tsx: cookies()","src/app/layout.tsx: headers()"]),
+        JSON.stringify(Array.from({length:40},(_,index)=>`src/components/very-long-client-boundary-${index}.tsx`)));
+    memoryDb.db.prepare("UPDATE repositories SET query_aliases_json=? WHERE name='fixture'")
+      .run(JSON.stringify({hakkimizda:["hakkımızda","şirket hakkında"]}));
     const memory=memoryDb.db.prepare("INSERT INTO memories(repository_id,memory_type,subject,content,confidence,created_sha,updated_sha) VALUES(1,'configuration','GATEWAY_URL','GATEWAY_URL configures the backend gateway.','verified',?,?)").run("a".repeat(40),"a".repeat(40));
     const memoryId=Number(memory.lastInsertRowid);
     memoryDb.db.prepare("INSERT INTO memory_evidence(memory_id,file_path,start_line,end_line,commit_sha) VALUES(?,?,?,?,?)").run(memoryId,"src/config.ts",3,3,"a".repeat(40));
@@ -43,6 +48,16 @@ test("exposes bounded read-only memory tools over MCP",async()=>{
     const exactRoute=await client.callTool({name:"memory_route",arguments:{repository:"fixture",route:"/hakkımızda"}});
     assert.equal((exactRoute.structuredContent as any).route,"/hakkimizda");
     assert.equal((exactRoute.structuredContent as any).sourceFile,"src/app/hakkimizda/page.tsx");
+    assert.equal((exactRoute.structuredContent as any).detail,"summary");
+    assert.deepEqual((exactRoute.structuredContent as any).renderingEvidence,["src/app/hakkimizda/page.tsx: cookies()"]);
+    assert.equal((exactRoute.structuredContent as any).clientBoundaries,undefined,"summary must not return the route dossier");
+    assert.ok(JSON.stringify(exactRoute.structuredContent).length<=1500);
+    const naturalRoute=await client.callTool({name:"memory_route",arguments:{repository:"fixture",route:"Hakkımızda ana sayfası",maxChars:1500}});
+    assert.equal((naturalRoute.structuredContent as any).route,"/hakkimizda");
+    const fullRoute=await client.callTool({name:"memory_route",arguments:{repository:"fixture",route:"/hakkımızda",detail:"full",maxChars:1000}});
+    assert.equal((fullRoute.structuredContent as any).detail,"full");
+    assert.equal((fullRoute.structuredContent as any).budget.truncated,true);
+    assert.ok(JSON.stringify(fullRoute.structuredContent).length<=1000);
     const search=await client.callTool({name:"memory_context",arguments:{repository:"fixture",question:"GATEWAY_URL configuration",maxChars:1500}});
     assert.equal((search.structuredContent as any).items[0].subject,"GATEWAY_URL");
     assert.ok((search.structuredContent as any).estimatedTokens<400);

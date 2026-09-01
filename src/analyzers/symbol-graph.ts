@@ -264,6 +264,27 @@ export class SymbolGraph {
     return "GET";
   }
 
+  /** Resolve the common local `fetcher({url, options:{method}})` abstraction. */
+  private configuredFetcher(call:ts.CallExpression,file:string):{target:string;method:string}|null {
+    if (!ts.isIdentifier(call.expression)||call.expression.text!=="fetcher") return null;
+    const init=call.arguments[0];
+    if (!init||!ts.isObjectLiteralExpression(init)) return null;
+    const property=(object:ts.ObjectLiteralExpression,name:string)=>object.properties.find((item):item is ts.PropertyAssignment=>
+      ts.isPropertyAssignment(item)&&item.name.getText().replace(/["']/g,"")===name);
+    const url=property(init,"url");
+    if (!url) return null;
+    const target=this.resolveTarget(file,url.initializer);
+    if (!target) return null;
+    let method="GET";
+    const directMethod=property(init,"method");
+    const options=property(init,"options");
+    const nestedMethod=options&&ts.isObjectLiteralExpression(options.initializer) ? property(options.initializer,"method") : undefined;
+    const methodProperty=nestedMethod ?? directMethod;
+    const resolved=methodProperty ? this.resolveTarget(file,methodProperty.initializer) : null;
+    if (resolved) method=resolved.toUpperCase();
+    return {target,method};
+  }
+
   /** Every edge the ontology calls "stored", except `imports`, `inherits` and `delegates-to`. */
   edges(knownRoutes:string[]=[]):GraphEdge[] {
     const routes=new Set(knownRoutes);
@@ -282,6 +303,17 @@ export class SymbolGraph {
         const fromKey=holder ? symbolKey(file,holder) : file;
         const fromKind:GraphNodeKind=holder ? (facts.serverFunctions.has(holder) ? "server-function" : facts.components.has(holder) ? "component" : "symbol") : "module";
         const line=lineOf(facts.source,node);
+
+        // A nested callable is a real execution hop (`getProducts -> fetchFn`),
+        // unlike an ordinary local value. Preserve that hop so endpoint/config
+        // effects inside the closure remain reachable from the exported service.
+        if (ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&isCallableInitializer(node.initializer)) {
+          const outer=enclosingSymbol(node.parent);
+          if (outer&&outer!==node.name.text) {
+            push({type:"calls",from:symbolKey(file,outer),fromKind:facts.serverFunctions.has(outer) ? "server-function" : facts.components.has(outer) ? "component" : "symbol",
+              to:symbolKey(file,node.name.text),toKind:"symbol",filePath:file,symbol:outer,startLine:line,confidence:"observed"});
+          }
+        }
 
         if (ts.isJsxOpeningElement(node)||ts.isJsxSelfClosingElement(node)) {
           const tag=node.tagName.getText();
@@ -323,6 +355,15 @@ export class SymbolGraph {
 
         if (ts.isCallExpression(node)) {
           const callee=node.expression;
+          const configuredFetcher=this.configuredFetcher(node,file);
+          if (configuredFetcher) {
+            push({type:"fetches",from:fromKey,fromKind,to:`${configuredFetcher.method} ${configuredFetcher.target}`,toKind:"backend-endpoint",
+              filePath:file,symbol:holder,startLine:line,confidence:"observed"});
+          }
+          if (ts.isPropertyAccessExpression(callee)&&["fetchQuery","prefetchQuery"].includes(callee.name.text)) {
+            push({type:"calls",from:fromKey,fromKind,to:`framework:react-query#${callee.name.text}`,toKind:"symbol",
+              filePath:file,symbol:holder,startLine:line,confidence:"observed"});
+          }
           if (ts.isIdentifier(callee)&&callee.getText()==="fetch"&&node.arguments.length) {
             const raw=node.arguments[0]!;
             const target=this.resolveTarget(file,raw);
@@ -348,6 +389,9 @@ export class SymbolGraph {
                 filePath:file,symbol:holder,startLine:line,confidence:"observed"});
             } else if (facts.callables.has(name)) {
               push({type:"calls",from:fromKey,fromKind,to:symbolKey(file,name),toKind:facts.serverFunctions.has(name) ? "server-function" : "symbol",
+                filePath:file,symbol:holder,startLine:line,confidence:"observed"});
+            } else if (name==="dehydrate"&&facts.imports.get(name)?.file==="@tanstack/query-core") {
+              push({type:"calls",from:fromKey,fromKind,to:"framework:react-query#dehydrate",toKind:"symbol",
                 filePath:file,symbol:holder,startLine:line,confidence:"observed"});
             }
           } else if (ts.isPropertyAccessExpression(callee)&&ts.isIdentifier(callee.expression)) {

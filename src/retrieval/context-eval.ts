@@ -23,7 +23,7 @@ const FOCUSED_EVIDENCE_MAX=4;
 
 type ToolName="memory_repository"|"memory_route"|"memory_context";
 
-interface PlanStep { tool:ToolName; args?:{route?:string;type?:string;limit?:number;maxChars?:number}; }
+interface PlanStep { tool:ToolName; args?:{route?:string;type?:string;limit?:number;maxChars?:number;detail?:"summary"|"runtime"|"dependencies"|"full"}; }
 
 interface ContextEvalCase {
   id:string;
@@ -35,6 +35,10 @@ interface ContextEvalCase {
   policy:"memory-sufficient"|"targeted-source"|"report-gap"|"abstain";
   expectedEvidence:string[];
   baselineReadSet:string[];
+  /** Optional real client transcript measurement. Without it, file sizes are a targeted-source estimate. */
+  baselineObserved?:{sourceToolChars:number;discoveryToolChars?:number;sourceFiles?:number;provenance:string};
+  /** Per-case efficiency regression contract, evaluated alongside correctness. */
+  budgetGate?:{maxEngineChars?:number;maxCitedButNotExpected?:number;requireCheaperThanBaseline?:boolean};
   /** Literal strings that must not appear in the pack; a hit means the engine asserts something the source contradicts. */
   packForbidden?:string[];
   plan:PlanStep[];
@@ -78,7 +82,7 @@ function summarizeResult(tool:ToolName,result:any):string[] {
   if (tool==="memory_repository") return [`repository:${result.name} next=${result.nextVersion} indexedSha=${String(result.lastIndexedSha).slice(0,7)}`];
   if (tool==="memory_route") {
     if (result.routes) return result.routes.map((row:any)=>`route:${row.route} -> ${row.sourceFile}`);
-    return [`route:${result.route} rendering=${result.rendering} source=${result.sourceFile} deps=${(result.dependencies ?? []).length}`];
+    return [`route:${result.route} rendering=${result.rendering} source=${result.sourceFile} deps=${result.dependencyCounts?.total ?? 0}`];
   }
   // memory_context returns one of several discriminated packs.
   if (Array.isArray(result.items)) return result.items.map((item:any)=>`${item.type}:${item.subject} [${(item.channels ?? []).join("+")}]`);
@@ -198,7 +202,9 @@ function classifyMiss(input:{
 async function callTool(tools:MemoryTools,repository:string,question:string,step:PlanStep):Promise<any> {
   const args=step.args ?? {};
   if (step.tool==="memory_repository") return tools.repository(repository);
-  if (step.tool==="memory_route") return args.route ? tools.route(repository,args.route) : tools.routes(repository,args.limit ?? 50);
+  if (step.tool==="memory_route") return args.route
+    ? tools.route(repository,args.route,{detail:args.detail,maxChars:args.maxChars})
+    : tools.routes(repository,args.limit ?? 50,args.maxChars);
   return tools.context(question,{repository,maxChars:args.maxChars});
 }
 
@@ -270,8 +276,23 @@ export async function runContextEvaluation(memoryDb:MemoryDatabase,file:string):
       noiseCount:noise.length,
     });
 
-    let baselineChars=discovery;
-    for (const relative of item.baselineReadSet) baselineChars+=await fileChars(repoConfig.path,relative);
+    let estimatedSourceChars=0;
+    for (const relative of item.baselineReadSet) estimatedSourceChars+=await fileChars(repoConfig.path,relative);
+    const observed=item.baselineObserved;
+    const baselineSourceChars=observed?.sourceToolChars ?? estimatedSourceChars;
+    const chargedDiscoveryChars=observed?.discoveryToolChars ?? 0;
+    const baselineChars=baselineSourceChars+chargedDiscoveryChars;
+    const regressionFailures:string[]=[];
+    if (item.budgetGate?.maxEngineChars!=null&&engineChars>item.budgetGate.maxEngineChars) {
+      regressionFailures.push(`engine chars ${engineChars} exceed ${item.budgetGate.maxEngineChars}`);
+    }
+    if (item.budgetGate?.maxCitedButNotExpected!=null&&noise.length>item.budgetGate.maxCitedButNotExpected) {
+      regressionFailures.push(`unexpected citations ${noise.length} exceed ${item.budgetGate.maxCitedButNotExpected}`);
+    }
+    if (item.budgetGate?.requireCheaperThanBaseline&&baselineChars>0&&engineChars>=baselineChars) {
+      regressionFailures.push(`engine chars ${engineChars} are not below baseline ${baselineChars}`);
+    }
+    const primaryMissClass=classification.primary ?? (regressionFailures.length ? "payload-regression" : null);
 
     cases.push({
       caseId:item.id,
@@ -285,10 +306,15 @@ export async function runContextEvaluation(memoryDb:MemoryDatabase,file:string):
       toolCalls:steps.length,
       engine:{chars:engineChars,tokens:tokensFor(engineChars),latencyMs:Date.now()-started,error:failed},
       baseline:{
-        files:item.baselineReadSet.length,
+        files:observed?.sourceFiles ?? item.baselineReadSet.length,
         chars:baselineChars,
         tokens:tokensFor(baselineChars),
-        discoveryChars:discovery,
+        sourceChars:baselineSourceChars,
+        sourceTokens:tokensFor(baselineSourceChars),
+        discoveryChars:chargedDiscoveryChars,
+        potentialDiscoveryChars:discovery,
+        measurement:observed ? "observed-transcript" : "targeted-source-estimate",
+        provenance:observed?.provenance ?? "baselineReadSet file sizes; unobserved discovery is not charged",
       },
       contextSavingPercent:baselineChars ? Number((((baselineChars-engineChars)/baselineChars)*100).toFixed(1)) : null,
       evidence:{
@@ -298,6 +324,7 @@ export async function runContextEvaluation(memoryDb:MemoryDatabase,file:string):
         missing,
         citedButNotExpected:noise,
       },
+      budgetGate:{configured:item.budgetGate ?? null,passed:regressionFailures.length===0,failures:regressionFailures},
       diagnosis:{
         inferredTypes,
         inferredRoute:understood.route ?? null,
@@ -306,7 +333,7 @@ export async function runContextEvaluation(memoryDb:MemoryDatabase,file:string):
         deadTypeFilter:typesWithNoMemory(memoryDb,suite.repository,inferredTypes),
         missingFileFacts:missingFacts,
         declaredInsufficient,
-        primaryMissClass:classification.primary,
+        primaryMissClass,
         secondaryMissClasses:classification.secondary,
         perFileMissClass:classification.perFile,
         forbiddenClaimsInPack:(item.packForbidden ?? []).filter((pattern)=>payload.includes(pattern)),
@@ -337,6 +364,7 @@ export async function runContextEvaluation(memoryDb:MemoryDatabase,file:string):
       engineTokens:cases.reduce((sum,item)=>sum+item.engine.tokens,0),
       baselineTokens:cases.reduce((sum,item)=>sum+item.baseline.tokens,0),
       baselineSourceFiles:cases.reduce((sum,item)=>sum+item.baseline.files,0),
+      potentialDiscoveryTokens:tokensFor(discovery),
       meanEvidenceRecall:withRecall.length ? Number((withRecall.reduce((sum,item)=>sum+(item.evidence.recall ?? 0),0)/withRecall.length).toFixed(4)) : null,
       medianContextSavingPercent:savings.length ? savings[Math.floor(savings.length/2)]! : null,
       missClassCounts:cases.reduce((counts:Record<string,number>,item)=>{

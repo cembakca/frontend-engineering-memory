@@ -13,6 +13,7 @@ const BASELINE:Array<[string,string]>=[
   ["Bütün aktif HTTP route'larını ve source dosyalarını listele.","lookup"],
   ["Menü hangi upstream endpoint'ten gelir ve cache süresi nedir?","lookup"],
   ["Newsletter aboneliği UI'dan backend'e hangi sırayla gider?","explain-flow"],
+  ["Client token refresh isteği handler üzerinden OAuth endpoint'ine nasıl gider?","explain-flow"],
   ["Global menü hangi layout/component zinciriyle tüm sayfalara ulaşır?","explain-flow"],
   ["GATEWAY_URL davranışı değişirse hangi handler, fetch ve route'lar etkilenir?","impact"],
   ["hCaptcha adapter değişirse hangi kullanıcı akışları risklidir; API handler'lar doğrudan etkilenir mi?","impact"],

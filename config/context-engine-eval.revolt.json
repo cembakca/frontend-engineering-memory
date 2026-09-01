@@ -17,6 +17,8 @@
       "policy": "memory-sufficient",
       "expectedEvidence": ["src/app/kart-sihirbazi/page.tsx"],
       "baselineReadSet": ["src/app/kart-sihirbazi/page.tsx"],
+      "baselineObserved": {"sourceToolChars": 17480, "discoveryToolChars": 0, "sourceFiles": 1, "provenance": "config/eval-observations/codex-rvt-e01-2026-09-01.json; median of three clean source-only Codex runs"},
+      "budgetGate": {"maxEngineChars": 1000, "maxCitedButNotExpected": 2, "requireCheaperThanBaseline": true},
       "plan": [{"tool": "memory_route", "args": {"route": "/kart-sihirbazi"}}]
     },
     {
@@ -83,6 +85,8 @@
         "src/app/interest-free-deals/page.tsx",
         "src/utils/api/services/interest-free-deals/list.ts"
       ],
+      "baselineObserved": {"sourceToolChars": 16103, "discoveryToolChars": 0, "sourceFiles": 3, "provenance": "config/eval-observations/codex-rvt-f01-2026-09-01.json; median of three clean source-only Codex runs"},
+      "budgetGate": {"maxEngineChars": 3000, "maxCitedButNotExpected": 2, "requireCheaperThanBaseline": true},
       "plan": [{"tool": "memory_context", "args": {}}]
     },
     {

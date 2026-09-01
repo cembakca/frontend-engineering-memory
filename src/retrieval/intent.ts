@@ -43,6 +43,7 @@ const RULES:Rule[]=[
   {intent:"explain-flow",name:"ordered-flow",weight:7,pattern:/\b(?:hangi sirayla|adim adim|step by step|end[- ]to[- ]end)\b/},
   {intent:"explain-flow",name:"layer-transition",weight:6,pattern:/\b(?:ui(?:'|’)dan|client(?:'|’)dan|formdan|browserdan).{0,40}\b(?:backend|server|upstream)\b/},
   {intent:"explain-flow",name:"chain",weight:6,pattern:/\b(?:akis\w*|flow|zincir\w*|pipeline)\b/},
+  {intent:"explain-flow",name:"path-through",weight:6,pattern:/\b(?:nasil|hangi yoldan).{0,70}\b(?:gider|gecer|ilerler)\b/},
   {intent:"explain-flow",name:"transformation",weight:5,pattern:/\b(?:nasil).{0,50}\b(?:donus\w*|uretilir|ulasir|baglanir)\b/},
   {intent:"explain-flow",name:"data-origin",weight:5,pattern:/\b(?:iceri[kg]\w*|veri\w*|gorsel\w*).{0,45}\b(?:nereden|nasil).{0,25}\bgelir\b/},
 

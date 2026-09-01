@@ -41,6 +41,8 @@ export interface FlowOptions {
   follow?:GraphEdgeType[];
   /** Exploration budget before pruning. Guards pathological graphs. */
   maxExplore?:number;
+  /** Keep only branches that lead to an HTTP/cache boundary. */
+  focus?:"all"|"data";
 }
 
 interface FlowNode { edge:GraphEdge; depth:number; children:FlowNode[] }
@@ -52,7 +54,9 @@ function moduleOf(key:string):string { return key.split("#")[0] ?? key; }
  * intra-module call such as `parseContactForm -> readText` is implementation
  * detail of one helper, not a step of the flow.
  */
-function isSignificant(edge:GraphEdge):boolean {
+function isSignificant(edge:GraphEdge,focus:"all"|"data"="all"):boolean {
+  if (focus==="data") return edge.type==="fetches"||edge.type==="submits-to"||edge.type==="tags"||edge.type==="invalidates"
+    ||/framework:react-query#(?:fetchQuery|prefetchQuery|dehydrate)|hydrate-provider/i.test(edge.to);
   if (edge.type==="submits-to"||edge.type==="fetches"||edge.type==="reads"||edge.type==="tags"||edge.type==="invalidates") return true;
   if (edge.type==="references") return false;
   return moduleOf(edge.from)!==moduleOf(edge.to);
@@ -72,13 +76,13 @@ function index(edges:GraphEdge[],follow:Set<GraphEdgeType>):Map<string,GraphEdge
 }
 
 /** Keep a branch only when it, or something under it, is significant. */
-function prune(nodes:FlowNode[]):{kept:FlowNode[];dropped:number} {
+function prune(nodes:FlowNode[],focus:"all"|"data"="all"):{kept:FlowNode[];dropped:number} {
   let dropped=0;
   const kept:FlowNode[]=[];
   for (const node of nodes) {
-    const below=prune(node.children);
+    const below=prune(node.children,focus);
     dropped+=below.dropped;
-    if (isSignificant(node.edge)||below.kept.length) {
+    if (isSignificant(node.edge,focus)||below.kept.length) {
       kept.push({...node,children:below.kept});
     } else {
       dropped+=1;
@@ -121,7 +125,7 @@ export function traceFlow(edges:GraphEdge[],seed:string,options:FlowOptions={}):
     return out;
   };
 
-  const {kept,dropped}=prune(explore(seed,0));
+  const {kept,dropped}=prune(explore(seed,0),options.focus ?? "all");
 
   const steps:FlowStep[]=[];
   const endpoints:string[]=[];

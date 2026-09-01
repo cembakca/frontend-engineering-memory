@@ -108,6 +108,9 @@ function variableCost(run:any):any {
       comparable:item.policy!=="abstain",
       engineTokens:item.engine.tokens,
       baselineTokens:item.baseline.tokens,
+      baselineSourceTokens:item.baseline.sourceTokens ?? item.baseline.tokens,
+      baselineDiscoveryTokens:tokensFor(Number(item.baseline.discoveryChars ?? 0)),
+      baselineMeasurement:item.baseline.measurement ?? "legacy-combined-estimate",
       nominalSaving:item.baseline.tokens-item.engine.tokens,
       // A failed pack does not remove the source read, so the engine cost is added to it.
       effectiveSaving:clean ? item.baseline.tokens-item.engine.tokens : -item.engine.tokens,
@@ -157,10 +160,14 @@ export async function runContextEconomy(options:{run?:string;policyFile?:string}
     // Only the client knows these; the engine must never guess them.
     clientReported:{
       totalContextTokens:null,
+      systemPromptTokens:null,
+      toolDefinitionTokens:null,
+      mcpResultTokens:null,
+      sourceToolResultTokens:null,
       cacheReadTokens:null,
       cacheWriteTokens:null,
       outputTokens:null,
-      note:"Fill from the client (Claude Code /context and /usage). The harness measures payload, not billed context.",
+      note:"Fill from the client context breakdown. Keep total context, fixed tool definitions, MCP results, source results, cache reads/writes and output separate; the harness measures payload, not billed context.",
     },
   };
 }

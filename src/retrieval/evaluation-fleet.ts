@@ -56,6 +56,23 @@ function validateCase(item:any,index:number,repository:string):string[] {
   if (!Array.isArray(item.expectedEvidence)) errors.push(`${label}: expectedEvidence must be an array`);
   if (!Array.isArray(item.baselineReadSet)) errors.push(`${label}: baselineReadSet must be an array`);
   if (!Array.isArray(item.plan)||!item.plan.length) errors.push(`${label}: at least one MCP plan step is required`);
+  if (item.baselineObserved!==undefined) {
+    if (!item.baselineObserved||!Number.isFinite(item.baselineObserved.sourceToolChars)||item.baselineObserved.sourceToolChars<0) {
+      errors.push(`${label}: baselineObserved.sourceToolChars must be a non-negative number`);
+    }
+    if (typeof item.baselineObserved?.provenance!=="string"||!item.baselineObserved.provenance.trim()) {
+      errors.push(`${label}: baselineObserved.provenance is required`);
+    }
+  }
+  if (item.budgetGate!==undefined) {
+    if (!item.budgetGate||typeof item.budgetGate!=="object") errors.push(`${label}: budgetGate must be an object`);
+    if (item.budgetGate?.maxEngineChars!==undefined&&(!Number.isInteger(item.budgetGate.maxEngineChars)||item.budgetGate.maxEngineChars<500)) {
+      errors.push(`${label}: budgetGate.maxEngineChars must be an integer >= 500`);
+    }
+    if (item.budgetGate?.maxCitedButNotExpected!==undefined&&(!Number.isInteger(item.budgetGate.maxCitedButNotExpected)||item.budgetGate.maxCitedButNotExpected<0)) {
+      errors.push(`${label}: budgetGate.maxCitedButNotExpected must be a non-negative integer`);
+    }
+  }
   if (item.policy!=="abstain"&&item.job!=="negative"&&Array.isArray(item.expectedEvidence)&&!item.expectedEvidence.length) {
     errors.push(`${label}: non-negative cases require expected source evidence`);
   }

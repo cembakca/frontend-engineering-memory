@@ -3,10 +3,15 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { extractSymbolGraph } from "../src/analyzers/symbol-graph.js";
+import { extractSymbolGraph, type GraphEdge, type GraphEdgeType } from "../src/analyzers/symbol-graph.js";
 import { traceFlow, routeEntriesFrom } from "../src/retrieval/flow.js";
 
 const TSCONFIG=JSON.stringify({compilerOptions:{moduleResolution:"Bundler",module:"ESNext",jsx:"preserve",baseUrl:".",paths:{"@/*":["src/*"]}}});
+
+function edge(type:GraphEdgeType,from:string,to:string,startLine:number):GraphEdge {
+  return {type,from,fromKind:"symbol",to,toKind:type==="fetches" ? "backend-endpoint" : "symbol",
+    filePath:from.split("#")[0]!,symbol:from.split("#")[1] ?? null,startLine,confidence:"observed"};
+}
 
 async function file(root:string,relative:string,content:string):Promise<void> {
   const target=path.join(root,relative);
@@ -95,4 +100,17 @@ test("respects the step budget and reports truncation",async()=>{
   const trace=await traceFixture({maxSteps:2});
   assert.equal(trace.steps.length,2);
   assert.equal(trace.truncated,true);
+});
+
+test("data focus keeps only branches that reach an external boundary",async()=>{
+  const edges=[
+    edge("calls","page#Page","logger#log",1),
+    edge("calls","logger#log","sanitize#meta",2),
+    edge("calls","page#Page","service#getProducts",3),
+    edge("calls","service#getProducts","service#fetchFn",4),
+    edge("fetches","service#fetchFn","GET /products",5),
+  ];
+  const trace=traceFlow(edges,"page#Page",{focus:"data"});
+  assert.deepEqual(trace.steps.map((item)=>item.to),["service#getProducts","service#fetchFn","GET /products"]);
+  assert.deepEqual(trace.endpoints,["GET /products"]);
 });

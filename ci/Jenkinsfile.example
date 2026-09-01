@@ -1,21 +1,22 @@
-// Posts the merged commit to the memory service. The service owns the checkout
+// Tells the memory service that main moved. The service owns the checkout
 // (registry `url`), so this pipeline needs no clone of its own and no shared
-// filesystem with the service.
+// filesystem with the service — it posts a commit and the service fetches it.
 pipeline {
   agent any
 
   environment {
-    // Full URL of the running memory service, e.g. http://memory.internal:4317
-    FRONTEND_MEMORY_URL = "${env.FRONTEND_MEMORY_URL}"
-    // The name used in config/repositories.json, which need not equal the job name.
-    MEMORY_REPOSITORY_NAME = 'company.web.next'
+    FRONTEND_MEMORY_URL    = 'http://memory.internal:4317'
+    MEMORY_REPOSITORY_NAME = 'company.web.next'   // the name in config/repositories.json
   }
 
   stages {
     stage('Sync engineering memory') {
       when { branch 'main' }
       steps {
-        sh 'ci/sync-after-main.sh'
+        // The secret the service checks; store it as a Jenkins credential.
+        withCredentials([string(credentialsId: 'memory-webhook-secret', variable: 'MEMORY_WEBHOOK_SECRET')]) {
+          sh 'ci/sync-after-main.sh'
+        }
       }
     }
   }

@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS repositories (
   query_aliases_json TEXT NOT NULL DEFAULT '{}',
   last_indexed_sha TEXT,
   last_indexed_at TEXT,
+  -- Set when the registry stops listing a repository. Retirement hides it from
+  -- every surface but keeps the rows, so re-adding the line brings it back.
+  retired_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

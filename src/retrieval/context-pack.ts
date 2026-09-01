@@ -275,13 +275,16 @@ export function compileContextPack(input:ContextPackInput,options:{maxChars?:num
       for (const item of checks.gaps.filter((gap)=>gap.target)) append(pack,pack.verification.gaps,item,"verification.gaps",effectiveMax);
     };
     if (input.verificationFirst) appendChecks();
-    for (const item of input.exemplars) append(pack,pack.exemplars,fact(item),"exemplars",effectiveMax);
+    // An exact graph anchor is stronger implementation evidence than fuzzy
+    // exemplars. Reserve the concrete edit surface first so a long memory fact
+    // cannot evict the very service/file named by the user.
     if (input.impact) {
       copyStrings(pack,pack.editSurface.files,input.impact.files,"editSurface.files",effectiveMax);
       copyStrings(pack,pack.editSurface.routes,input.impact.routes,"editSurface.routes",effectiveMax);
       copyStrings(pack,pack.editSurface.components,input.impact.components,"editSurface.components",effectiveMax);
       copyStrings(pack,pack.editSurface.config,input.impact.config,"editSurface.config",effectiveMax);
     }
+    for (const item of input.exemplars) append(pack,pack.exemplars,fact(item),"exemplars",effectiveMax);
     if (!input.verificationFirst) appendChecks();
     return finalize(pack,input);
   }

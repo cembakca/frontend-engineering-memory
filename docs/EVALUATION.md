@@ -45,6 +45,8 @@ Kurallar:
 - Tool transcript, açılan source dosyaları ve final cevap saklanır.
 - Claude için `/usage` ve `/context`; kullanılabilir Codex session/context metriği ayrıca kaydedilir.
 - MCP payload karakteri ve engine'in verdiği token tahmini model tokenından ayrı tutulur.
+- Unobserved discovery is not charged to the baseline. `baselineReadSet` is a targeted-source estimate; real client tool output may be supplied as `baselineObserved` with provenance.
+- Fixed session cost (policy, MCP instructions and tool schemas), variable MCP/source payload, cached input and output are reported separately.
 - Agent memory cevabı yeterli bulsa bile evaluator expected evidence ile fact doğruluğunu kontrol eder.
 
 ## 5. Ölçümler
@@ -146,6 +148,8 @@ The gate fails when:
 - median context saving is below `40%`.
 
 Questions must model real engineering work. “List files containing React” is not a useful golden case. “If the token-refresh client changes, which auth handler and user flow are affected?” is. Exact lookup cases should normally be memory-sufficient; flow, impact, implementation, and debug cases may require targeted source; unsupported rationale or runtime claims must abstain.
+
+Exact lookup cases should also carry a `budgetGate` when a compact structured answer is expected. Use `maxEngineChars`, `maxCitedButNotExpected`, and `requireCheaperThanBaseline` to prevent a correct but over-retrieved route dossier from passing economy gates. A repository-wide discovery command may be recorded as potential cost, but it is charged only when an observed transcript proves that the client actually placed its output in model context.
 
 Feedback closes the loop. Export actionable reports with `pnpm memory feedback export <repository>`, curate them into the repository overlay, and keep the feedback entry open until the regression case exists. Embedding, graph, ranking, or extraction changes are justified only by a reproducible fleet miss.
 

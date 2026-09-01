@@ -24,6 +24,7 @@ export class MemoryStore {
       INSERT INTO repositories(name,path,main_branch,framework,next_version,react_version,node_version,router_type,package_manager,build_command,start_command,dev_command,output_mode,package_name,query_aliases_json,updated_at)
       VALUES(@name,@path,@mainBranch,@framework,@nextVersion,@reactVersion,@nodeVersion,@routerType,@packageManager,@buildCommand,@startCommand,@devCommand,@outputMode,@packageName,@queryAliases,CURRENT_TIMESTAMP)
       ON CONFLICT(name) DO UPDATE SET
+        retired_at=NULL,
         path=excluded.path, main_branch=excluded.main_branch, framework=excluded.framework,
         next_version=excluded.next_version, react_version=excluded.react_version,
         node_version=excluded.node_version, router_type=excluded.router_type,
@@ -43,12 +44,39 @@ export class MemoryStore {
     return row.id;
   }
 
-  getRepository(name: string): any {
-    return this.db.prepare("SELECT * FROM repositories WHERE name=?").get(name);
+  /**
+   * Retired repositories are hidden here rather than at each call site: this is
+   * the single point every surface — MCP, UI, retrieval, rollout — reads through,
+   * so one filter retires a repository everywhere at once.
+   */
+  getRepository(name: string, options: { includeRetired?: boolean } = {}): any {
+    const clause = options.includeRetired ? "" : " AND retired_at IS NULL";
+    return this.db.prepare(`SELECT * FROM repositories WHERE name=?${clause}`).get(name);
   }
 
-  listRepositories(): any[] {
-    return this.db.prepare("SELECT * FROM repositories ORDER BY name").all();
+  listRepositories(options: { includeRetired?: boolean } = {}): any[] {
+    const clause = options.includeRetired ? "" : " WHERE retired_at IS NULL";
+    return this.db.prepare(`SELECT * FROM repositories${clause} ORDER BY name`).all();
+  }
+
+  /** Hides a repository the registry no longer lists. Reversible: re-indexing clears it. */
+  retireRepository(name: string): boolean {
+    return this.db.prepare("UPDATE repositories SET retired_at=CURRENT_TIMESTAMP WHERE name=? AND retired_at IS NULL")
+      .run(name).changes > 0;
+  }
+
+  restoreRepository(name: string): boolean {
+    return this.db.prepare("UPDATE repositories SET retired_at=NULL WHERE name=?").run(name).changes > 0;
+  }
+
+  listRetiredRepositories(): Array<{ name: string; retiredAt: string }> {
+    return (this.db.prepare("SELECT name, retired_at retiredAt FROM repositories WHERE retired_at IS NOT NULL ORDER BY name")
+      .all() as Array<{ name: string; retiredAt: string }>);
+  }
+
+  /** Permanently removes a retired repository and everything that cascades from it. */
+  purgeRepository(name: string): boolean {
+    return this.db.prepare("DELETE FROM repositories WHERE name=? AND retired_at IS NOT NULL").run(name).changes > 0;
   }
 
   beginRun(repositoryId: number, type: "FULL" | "INCREMENTAL", fromSha: string | null, toSha: string,reason="INDEXING"): number {

@@ -77,6 +77,40 @@ test("attributes an edge to the enclosing function, not to an inner binding",asy
   assert.notEqual(edge?.from,"src/lib/menu.ts#response");
 });
 
+test("extracts an endpoint from the repository fetcher object contract",async()=>{
+  const edges=await withRepo(async(root)=>{
+    await file(root,"src/api/fetcher.ts","export default async function fetcher(input:{url:string;options?:{method?:string}}){ return input }");
+    await file(root,"src/api/products.ts",`import fetcher from "./fetcher";
+export async function getProducts(){
+  const fetchFn=()=>fetcher({url:"/pages/products",options:{method:"POST"}});
+  return fetchFn();
+}`);
+  },["src/api/fetcher.ts","src/api/products.ts"]);
+
+  const intoClosure=find(edges,"calls",(item)=>item.from==="src/api/products.ts#getProducts"&&item.to==="src/api/products.ts#fetchFn");
+  assert.ok(intoClosure,"the exported service must reach its nested request closure");
+  const edge=find(edges,"fetches",(item)=>item.from==="src/api/products.ts#fetchFn");
+  assert.equal(edge?.to,"POST /pages/products");
+});
+
+test("records React Query server hydration lifecycle calls",async()=>{
+  const edges=await withRepo(async(root)=>{
+    await file(root,"src/providers/Hydrate.tsx","export default function Hydrate(){ return <div/> }");
+    await file(root,"src/app/page.tsx",`import { dehydrate } from "@tanstack/query-core";
+import Hydrate from "../providers/Hydrate";
+export default async function Page(){
+  const client:any={};
+  await client.fetchQuery({queryKey:["products"]});
+  const state=dehydrate(client);
+  return <Hydrate state={state}/>;
+}`);
+  },["src/providers/Hydrate.tsx","src/app/page.tsx"]);
+
+  assert.ok(find(edges,"calls",(item)=>item.to==="framework:react-query#fetchQuery"));
+  assert.ok(find(edges,"calls",(item)=>item.to==="framework:react-query#dehydrate"));
+  assert.ok(find(edges,"renders",(item)=>item.to==="src/providers/Hydrate.tsx#default"));
+});
+
 test("records renders edges and classifies JSX-returning exports as components",async()=>{
   const edges=await withRepo(async(root)=>{
     await file(root,"src/components/Badge.tsx","export function Badge(){ return <span/> }");

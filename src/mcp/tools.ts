@@ -7,6 +7,7 @@ import { FreshnessCache, packFreshness } from "../retrieval/freshness.js";
 import { planQuery } from "../retrieval/query-plan.js";
 import { RetrievalTelemetry } from "../telemetry/retrieval-telemetry.js";
 import { routeLookupKey } from "../retrieval/route-identity.js";
+import { matchingAliasRoute, normalizeQueryAliases } from "../retrieval/query-vocabulary.js";
 
 function json(value:string | null | undefined,fallback:any):any {
   if (!value) return fallback;
@@ -28,6 +29,59 @@ function compactRoute(row:any):any {
     middlewareMatched:row.middleware_matched==null ? null : Boolean(row.middleware_matched),
     lastSeenSha:row.last_seen_sha,
   };
+}
+
+export type RouteDetail="summary"|"runtime"|"dependencies"|"full";
+
+function routeEvidence(row:any):string[] {
+  const source=String(row.source_file);
+  return json(row.evidence_json,[]).filter((item:unknown)=>String(item).startsWith(`${source}:`)).slice(0,8);
+}
+
+function budgetRoutePayload(payload:any,maxChars:number):any {
+  const bounded=Math.max(500,Math.min(24_000,maxChars));
+  const omitted:Record<string,number>={};
+  const budget={maxChars:bounded,usedChars:0,estimatedTokens:0,truncated:false,omitted};
+  payload.budget=budget;
+  const arrays:Array<{name:string;value:any[]}>=[];
+  const add=(name:string,value:unknown)=>{ if (Array.isArray(value)) arrays.push({name,value}); };
+  add("dependencies.inherited",payload.dependencyScope?.inherited);
+  add("dependencies.direct",payload.dependencyScope?.direct);
+  add("clientBoundaries",payload.clientBoundaries);
+  add("evidence",payload.evidence);
+  add("renderingEvidence",payload.renderingEvidence);
+  add("middlewareMatchers",payload.middlewareMatchers);
+  add("layoutChain",payload.layoutChain);
+  add("matches",payload.matches);
+  add("routes",payload.routes);
+  const trimArray=():boolean=>{
+    const candidate=arrays.filter((item)=>item.value.length)
+      .sort((a,b)=>JSON.stringify(b.value[b.value.length-1]).length-JSON.stringify(a.value[a.value.length-1]).length)[0];
+    if (!candidate) return false;
+    candidate.value.pop();
+    omitted[candidate.name]=(omitted[candidate.name] ?? 0)+1;
+    budget.truncated=true;
+    return true;
+  };
+  const optionalSections=["evidence","clientBoundaries","dependencyScope","dependencyCounts","dataSources","backendDependencies",
+    "middlewareMatchers","layoutChain","cacheBehavior","seoType","metadataSource","segmentConfig","controlFlow"];
+  for (let guard=0;guard<500;guard+=1) {
+    budget.usedChars=JSON.stringify(payload).length;
+    budget.estimatedTokens=Math.ceil(budget.usedChars/3.5);
+    const serializedLength=JSON.stringify(payload).length;
+    if (serializedLength<=bounded) {
+      if (budget.usedChars===serializedLength) break;
+      continue;
+    }
+    if (trimArray()) continue;
+    const key=optionalSections.find((name)=>payload[name]!==undefined);
+    if (!key) break; // The deliberately small core summary is all that remains.
+    const value=payload[key];
+    delete payload[key];
+    omitted[key]=Array.isArray(value) ? value.length : 1;
+    budget.truncated=true;
+  }
+  return payload;
 }
 
 /** Stable identifiers a pack returned, so a retrieval miss can be traced without storing any content. */
@@ -70,24 +124,67 @@ export class MemoryTools {
       lastIndexedSha:row.last_indexed_sha,lastIndexedAt:row.last_indexed_at};
   }
 
-  routes(repository:string|undefined,limit=50):any { return {repository:repository ?? null,routes:this.store.listRoutes(repository).slice(0,Math.max(1,Math.min(100,limit))).map(compactRoute)}; }
-
-  private routeDetail(row:any):any {
-    const repository=String(row.repository);
-    const actualRoute=String(row.route);
-    return {
-      repository,...compactRoute(row),layoutChain:json(row.layout_chain_json,[]),clientBoundaries:json(row.client_boundaries_json,[]),
-      dataSources:json(row.data_sources_json,[]),backendDependencies:json(row.backend_dependencies_json,[]),cacheBehavior:json(row.cache_behavior_json,[]),
-      seoType:row.seo_type,metadataSource:row.metadata_source,middlewareMatchers:json(row.middleware_matchers_json,[]),
-      evidence:json(row.evidence_json,[]),dependencies:this.store.listRouteDependencies(repository,actualRoute),
-    };
+  routes(repository:string|undefined,limit=50,maxChars=8_000):any {
+    return budgetRoutePayload({repository:repository ?? null,
+      routes:this.store.listRoutes(repository).slice(0,Math.max(1,Math.min(100,limit))).map(compactRoute)},maxChars);
   }
 
-  route(repository:string|undefined,route:string):any {
-    const matches=this.store.findRoutes(route,repository);
+  private routeDetail(row:any,detail:RouteDetail="summary",maxChars=8_000):any {
+    const repository=String(row.repository);
+    const actualRoute=String(row.route);
+    const compact=compactRoute(row);
+    const summary:any={repository,route:compact.route,type:compact.type,router:compact.router,sourceFile:compact.sourceFile,
+      rendering:compact.rendering,renderingBasis:compact.renderingBasis,serverComponent:compact.serverComponent,
+      lastSeenSha:compact.lastSeenSha,detail,controlFlow:compact.controlFlow,renderingEvidence:routeEvidence(row)};
+    if (detail==="summary") return budgetRoutePayload(summary,maxChars);
+
+    const runtime={...summary,segmentConfig:compact.segmentConfig,dynamic:compact.dynamic,params:compact.params,
+      authRequired:compact.authRequired,middlewareMatched:compact.middlewareMatched,
+      layoutChain:json(row.layout_chain_json,[]),cacheBehavior:json(row.cache_behavior_json,[]),
+      seoType:row.seo_type,metadataSource:row.metadata_source,middlewareMatchers:json(row.middleware_matchers_json,[])};
+    if (detail==="runtime") return budgetRoutePayload(runtime,maxChars);
+
+    const dependencies=this.store.listRouteDependencies(repository,actualRoute);
+    const dependencyScope={
+      direct:dependencies.filter((item:any)=>item.source_file===row.source_file),
+      inherited:dependencies.filter((item:any)=>item.source_file!==row.source_file),
+    };
+    const dependencyPayload={...summary,dependencyScope,
+      dependencyCounts:{direct:dependencyScope.direct.length,inherited:dependencyScope.inherited.length,total:dependencies.length}};
+    if (detail==="dependencies") return budgetRoutePayload(dependencyPayload,maxChars);
+
+    return budgetRoutePayload({...runtime,...dependencyPayload,
+      clientBoundaries:json(row.client_boundaries_json,[]),dataSources:json(row.data_sources_json,[]),
+      backendDependencies:json(row.backend_dependencies_json,[]),evidence:json(row.evidence_json,[])},maxChars);
+  }
+
+  route(repository:string|undefined,route:string,options:{detail?:RouteDetail;maxChars?:number}={}):any {
+    let resolvedRoute=route;
+    if (!route.startsWith("/")) {
+      const repositories=repository ? [this.store.getRepository(repository)].filter(Boolean) : this.store.listRepositories();
+      const resolved=repositories.flatMap((repo:any)=>{
+        let aliases={};
+        try { aliases=normalizeQueryAliases(JSON.parse(String(repo.query_aliases_json ?? "{}"))); } catch {}
+        const candidate=matchingAliasRoute(route,[aliases],this.store.listRoutes(String(repo.name)).map((item:any)=>String(item.route)));
+        return candidate ? [{repository:String(repo.name),route:candidate}] : [];
+      });
+      if (!resolved.length) throw new Error(`Active route could not be resolved from query: ${repository ?? "all repositories"} ${route}`);
+      if (repository) resolvedRoute=resolved[0]!.route;
+      else {
+        const detail=options.detail ?? "summary";
+        const maxChars=options.maxChars ?? 8_000;
+        const matches=resolved.flatMap((item)=>this.store.findRoutes(item.route,item.repository));
+        return budgetRoutePayload({queryRoute:route,resolvedRoutes:resolved,
+          matches:matches.map((row)=>this.routeDetail(row,detail,maxChars))},maxChars);
+      }
+    }
+    const matches=this.store.findRoutes(resolvedRoute,repository);
     if (!matches.length) throw new Error(`Active route not found: ${repository ?? "all repositories"} ${route}`);
-    if (repository) return this.routeDetail(matches[0]);
-    return {queryRoute:route,normalizedRoute:routeLookupKey(route),matches:matches.map((row)=>this.routeDetail(row))};
+    const detail=options.detail ?? "summary";
+    const maxChars=options.maxChars ?? 8_000;
+    if (repository) return this.routeDetail(matches[0],detail,maxChars);
+    return budgetRoutePayload({queryRoute:route,normalizedRoute:routeLookupKey(resolvedRoute),
+      matches:matches.map((row)=>this.routeDetail(row,detail,maxChars))},maxChars);
   }
 
   dependencies(repository:string,options:{route?:string;type?:string;limit?:number}={}):any {

@@ -25,6 +25,16 @@ test("maps a product alias to an indexed static route",()=>{
     ["/","/interest-free-deals","/interest-free-deals/[slug]"]),"/interest-free-deals");
 });
 
+test("prefers a directly named parent route over nested routes that repeat it as an alias",()=>{
+  const groups=normalizeQueryAliases({
+    "kart sihirbazi form loading":["kart-sihirbazi/form/loading","kart sihirbazi","form","loading"],
+    "kart sihirbazi form":["kart-sihirbazi/form","kart sihirbazi","form"],
+    "kart sihirbazi":["kart-sihirbazi","card wizard"],
+  });
+  assert.equal(matchingAliasRoute("Kart sihirbazı ana sayfası",[groups],
+    ["/form","/kart-sihirbazi/form/loading","/kart-sihirbazi/form","/kart-sihirbazi"]),"/kart-sihirbazi");
+});
+
 test("rejects malformed repository vocabulary",()=>{
   assert.throws(()=>normalizeQueryAliases({contact:"not-an-array"}),/must be an array/);
   assert.throws(()=>normalizeQueryAliases({x:["contact"]}),/Invalid queryAliases key/);

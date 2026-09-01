@@ -73,7 +73,7 @@ The server exposes three read-only tools:
 | Tool | Purpose |
 | --- | --- |
 | `memory_repository` | Repository profiles and cross-repository package links |
-| `memory_route` | Route inventory, fleet-wide route lookup, behavior, evidence, and dependencies |
+| `memory_route` | Route inventory and fleet lookup; exact lookup defaults to a bounded route/source/rendering summary with optional `runtime`, `dependencies`, or `full` projection |
 | `memory_context` | Bounded lookup, flow, impact, debug, implementation, verification, change-review, temporal, and decision context |
 
 Build once for stdio clients:
@@ -97,6 +97,7 @@ pnpm serve
 
 - MCP: `http://127.0.0.1:4317/mcp`
 - UI: `http://127.0.0.1:4317/`
+- Webhook: `http://127.0.0.1:4317/webhook`
 - Health: `http://127.0.0.1:4317/health`
 
 Copy the policy block from `config/AGENTS.memory.example.md` into the target repository's `AGENTS.md` or equivalent agent instructions. See [Agent integrations](docs/INTEGRATIONS.md) for complete setup guidance.
@@ -122,6 +123,55 @@ pnpm memory freshness company.web.next
 pnpm memory reconcile-all
 pnpm memory rollout-status
 ```
+
+### The registry is the only file you edit
+
+`config/repositories.json` is watched while `pnpm serve` runs. Saving it is the whole operation:
+
+| Registry edit | Result |
+| --- | --- |
+| Entry added | Cloned if it has a `url`, then indexed |
+| Entry removed | Retired — leaves the UI, MCP and retrieval; rows are kept |
+| Entry re-added | Restored as it was, without re-indexing |
+
+The watch settles membership only — added, removed, re-added. New commits arrive through the webhook,
+so a repository whose CI trigger is missing stays visibly stale rather than being quietly kept fresh.
+
+Retirement is reversible on purpose: a typo in a JSON file should not destroy an index.
+`pnpm memory registry-retired [--purge=<name>]` lists and, when you are sure, reclaims the space.
+`pnpm memory registry-sync` runs the same reconciliation by hand.
+
+### Repositories the service checks out itself
+
+Give a registry entry a `url` instead of a `path` and the engine owns the checkout: it clones on first
+sync, then fetches and hard-resets to the indexed branch on every sync after that. Nobody works in it,
+so it is never dirty and no `git status` dance is needed before indexing.
+
+```bash
+pnpm memory repo-add company.web.next --url=git@gitlab.com:company/company.web.next.git
+pnpm memory sync company.web.next
+```
+
+Clones land in `MEMORY_WORKSPACE` (default `data/repos/<name>`). Pointing an existing service-owned
+checkout at a different `url` is refused rather than silently reused.
+
+### Triggering sync from CI
+
+`POST /webhook` accepts GitLab push, GitHub push, and a plain `{"repository","commit"}` body. When the
+payload carries a clone URL the repository is matched against the registry `url`, so the sender needs
+no knowledge of local names.
+
+```bash
+export MEMORY_WEBHOOK_SECRET=…      # required for any caller that is not loopback
+curl --fail -X POST "http://127.0.0.1:4317/webhook?wait=1" \
+  -H 'content-type: application/json' -H "x-memory-token: $MEMORY_WEBHOOK_SECRET" \
+  -d '{"repository":"company.web.next","commit":"<40-char sha>"}'
+```
+
+Queued by default (`202`) because indexing outlasts a webhook timeout; `?wait=1` returns the sync
+result for a pipeline that should fail when the index fails. A push to a branch the repository is not
+indexed from is reported as a deliberate skip, not an error. The Jenkins pipeline, the credential
+headers each host sends, and the full response table are in [Operations](docs/OPERATIONS.md).
 
 Günlük kısa komutların ötesindeki yeni proje ve proje güncelleme akışları için [Project lifecycle guide](docs/PROJECT_GUIDE.md), daha büyük rollout ve managed checkout işletimi için [Operations](docs/OPERATIONS.md) dokümanını kullanın.
 
@@ -200,9 +250,9 @@ The evaluation contract and 50-question golden catalog live in [Evaluation](docs
 - The SQLite database, local repository registry, `.env`, model cache, and evaluation runs are ignored by Git.
 - Telemetry stores query shape/hash by default, not question text or retrieved fact bodies.
 - MCP tools are read-only.
-- The HTTP server binds to `127.0.0.1` by default and has no authentication.
+- The HTTP server binds to `127.0.0.1` by default. `POST /webhook` is the one endpoint that authenticates: it requires `MEMORY_WEBHOOK_SECRET` from any caller that is not loopback, and compares the credential in constant time.
 
-Do not expose `MEMORY_HOST=0.0.0.0` without an authenticated reverse proxy. The same server also provides indexing endpoints.
+`/sync` and `/full-index` still have no authentication of their own, so do not expose `MEMORY_HOST=0.0.0.0` without an authenticated reverse proxy. Prefer `/webhook` for anything reaching the service from another host.
 
 ## Deliberate limits
 

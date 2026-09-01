@@ -1,0 +1,38 @@
+{
+  "caseId": "RVT-F01",
+  "date": "2026-09-01",
+  "codexVersion": "codex-cli 0.149.0-alpha.4.3",
+  "model": "gpt-5.6-sol",
+  "reasoningEffort": "medium",
+  "prompt": "Faizsiz fırsatlar sayfası ürün verisini hangi akışla alır? Cevabı kısa tut: server page, servis fonksiyonu, endpoint ve hydration sırası yeterli. Dosya değiştirme.",
+  "controls": {
+    "ephemeral": true,
+    "ignoreUserConfig": true,
+    "sandbox": "read-only",
+    "sameMemoryFirstPolicy": true,
+    "onlyDifference": "frontend_memory MCP availability"
+  },
+  "mcpRuns": [
+    {"inputTokens": 47498, "cachedInputTokens": 39168, "uncachedInputTokens": 8330, "outputTokens": 437, "reasoningTokens": 114, "toolCalls": 1, "sourceCommands": 0, "toolChars": 2644, "wallSeconds": 19.2},
+    {"inputTokens": 47512, "cachedInputTokens": 39168, "uncachedInputTokens": 8344, "outputTokens": 448, "reasoningTokens": 105, "toolCalls": 1, "sourceCommands": 0, "toolChars": 2641, "wallSeconds": 21.1},
+    {"inputTokens": 47515, "cachedInputTokens": 34048, "uncachedInputTokens": 13467, "outputTokens": 433, "reasoningTokens": 89, "toolCalls": 1, "sourceCommands": 0, "toolChars": 2645, "wallSeconds": 17.9}
+  ],
+  "sourceOnlyRuns": [
+    {"inputTokens": 85485, "cachedInputTokens": 72448, "uncachedInputTokens": 13037, "outputTokens": 784, "reasoningTokens": 129, "toolCalls": 3, "sourceCommands": 3, "toolChars": 15988, "wallSeconds": 25.0},
+    {"inputTokens": 110842, "cachedInputTokens": 93696, "uncachedInputTokens": 17146, "outputTokens": 997, "reasoningTokens": 168, "toolCalls": 4, "sourceCommands": 4, "toolChars": 27424, "wallSeconds": 30.2},
+    {"inputTokens": 85403, "cachedInputTokens": 69376, "uncachedInputTokens": 16027, "outputTokens": 818, "reasoningTokens": 154, "toolCalls": 3, "sourceCommands": 3, "toolChars": 16103, "wallSeconds": 27.6}
+  ],
+  "medians": {
+    "mcp": {"inputTokens": 47512, "cachedInputTokens": 39168, "uncachedInputTokens": 8344, "outputTokens": 437, "toolCalls": 1, "sourceCommands": 0, "toolChars": 2644, "wallSeconds": 19.2},
+    "sourceOnly": {"inputTokens": 85485, "cachedInputTokens": 72448, "uncachedInputTokens": 16027, "outputTokens": 818, "toolCalls": 3, "sourceCommands": 3, "toolChars": 16103, "wallSeconds": 27.6}
+  },
+  "savingsPercent": {
+    "inputTokens": 44.4,
+    "uncachedInputTokens": 47.9,
+    "outputTokens": 46.6,
+    "toolChars": 83.6,
+    "wallTime": 30.4
+  },
+  "correctness": {"mcp": 1, "sourceOnly": 1},
+  "notes": "All MCP runs used one memory_context call, opened no source, and returned the server page, getInterestOppList, endpoint, fetchQuery, dehydrate, and Hydrate sequence."
+}

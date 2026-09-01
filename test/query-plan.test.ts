@@ -24,6 +24,10 @@ test("routes flow and impact questions to their graph traversals",()=>{
   assert.deepEqual(impact.anchors.files,["src/lib/menu.ts"]);
 });
 
+test("treats a bare camel-case code symbol as a graph anchor",()=>{
+  assert.ok(planQuery("getInterestOppList pattern'ini izleyerek yeni sayfa ekle").anchors.symbols.includes("getInterestOppList"));
+});
+
 test("debug, implementation and verify plans use different channel order",()=>{
   assert.deepEqual(planQuery("Neden 502 upstream unreachable döner?").rounds[0].steps.map((item)=>item.channel),["exact-sql","graph-flow","fts"]);
   assert.deepEqual(planQuery("Yeni captcha formu eklemek için hangi pattern izlenmeli?").rounds[0].steps.map((item)=>item.channel),["fts","graph-flow","verification-graph"]);

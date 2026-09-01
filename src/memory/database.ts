@@ -50,6 +50,7 @@ export class MemoryDatabase {
     const repositoryColumns=this.db.prepare("PRAGMA table_info(repositories)").all() as Array<{name:string}>;
     if (!repositoryColumns.some((column)=>column.name==="package_name")) this.db.exec("ALTER TABLE repositories ADD COLUMN package_name TEXT");
     if (!repositoryColumns.some((column)=>column.name==="query_aliases_json")) this.db.exec("ALTER TABLE repositories ADD COLUMN query_aliases_json TEXT NOT NULL DEFAULT '{}'");
+    if (!repositoryColumns.some((column)=>column.name==="retired_at")) this.db.exec("ALTER TABLE repositories ADD COLUMN retired_at TEXT");
 
     const memoryColumns = this.db.prepare("PRAGMA table_info(memories)").all() as Array<{ name: string }>;
     if (!memoryColumns.some((column) => column.name === "removed_sha")) {
