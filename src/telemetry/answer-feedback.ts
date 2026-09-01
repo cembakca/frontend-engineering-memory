@@ -118,6 +118,29 @@ export class AnswerFeedback {
     };
   }
 
+  /** Export one repository's actionable backlog in the evaluation-suite shape for human completion and review. */
+  evaluationDraft(repository:string,options:{state?:BacklogState;limit?:number}={}):any {
+    const repo=this.memoryDb.db.prepare("SELECT name,last_indexed_sha FROM repositories WHERE name=?").get(repository) as
+      {name:string;last_indexed_sha:string|null}|undefined;
+    if (!repo) throw new Error(`Repository not found: ${repository}`);
+    const backlog=this.backlog(repository,options);
+    const cases=backlog.entries.map((entry:any)=>entry.draftCase);
+    const blockers=cases.flatMap((item:any)=>[
+      ...(item.question ? [] : [`${item.id}: question text is missing`]),
+      ...(item.expectedEvidence.length ? [] : [`${item.id}: expectedEvidence must be curated`]),
+      ...(item.strictFact ? [] : [`${item.id}: strictFact must be curated`]),
+    ]);
+    return {
+      suite:`Feedback regression draft — ${repository}`,
+      repository,
+      targetSha:repo.last_indexed_sha,
+      draft:true,
+      ready:blockers.length===0,
+      blockers,
+      cases,
+    };
+  }
+
   /** A backlog entry is only useful as a runnable case; this is that case, pre-filled as far as the data allows. */
   private draftCase(row:any):any {
     const signal=row.signal as FeedbackSignal;
@@ -128,6 +151,8 @@ export class AnswerFeedback {
       strict:signal==="wrong"||signal==="stale",
       question:row.query_text ?? null,
       questionMissing:row.query_text ? undefined : "MEMORY_TELEMETRY_QUERY_TEXT was off; supply the question during triage",
+      strictFact:null,
+      forbiddenClaims:[],
       policy:signal==="source-needed" ? "targeted-source" : "memory-sufficient",
       expectedEvidence:[],
       baselineReadSet:[],

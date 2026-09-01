@@ -5,9 +5,20 @@ import type { MemoryType, RetrievalQuery, SearchResult } from "../types.js";
 import { understandQuery } from "./understand.js";
 import { canonicalEntityKey, rankAndDedupe } from "./ranking.js";
 import { planQuery } from "./query-plan.js";
+import { matchingQueryAliases, normalizeQueryAliases, type QueryAliases } from "./query-vocabulary.js";
 
-function ftsQuery(input: string): string | null {
-  const terms = input.match(/[\p{L}\p{N}_@./:-]+/gu)?.filter((term) => term.length >= 2).slice(0,12) ?? [];
+function repositoryAliasGroups(memoryDb:MemoryDatabase,repository?:string):QueryAliases[] {
+  const rows=memoryDb.db.prepare(`SELECT query_aliases_json FROM repositories ${repository ? "WHERE name=?" : ""}`)
+    .all(...(repository ? [repository] : [])) as Array<{query_aliases_json:string|null}>;
+  return rows.flatMap((row)=>{
+    try { return [normalizeQueryAliases(JSON.parse(row.query_aliases_json ?? "{}"))]; }
+    catch { return []; }
+  });
+}
+
+function ftsQuery(input: string,aliases:QueryAliases[]): string | null {
+  const direct=input.match(/[\p{L}\p{N}_@./:-]+/gu)?.filter((term)=>term.length>=2).slice(0,12) ?? [];
+  const terms=[...direct,...matchingQueryAliases(input,aliases).slice(0,12)];
   return terms.length ? terms.map((term) => `"${term.replaceAll('"','""')}"`).join(" OR ") : null;
 }
 
@@ -66,7 +77,7 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
   const combined=new Map<number,SearchResult>();
   if (query.channels.includes("sql")) sqlResults(memoryDb,query,limit*2).forEach((result,index)=>add(combined,result,index+1));
 
-  const fts=ftsQuery(rawQuery);
+  const fts=ftsQuery(rawQuery,repositoryAliasGroups(memoryDb,query.repository));
   if (fts && query.channels.includes("fts")) {
     const typeFilter=explicitTypes?.size ? `AND m.memory_type IN (${[...explicitTypes].map(()=>"?").join(",")})` : "";
     const params:unknown[]=[fts];

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS repositories (
   dev_command TEXT,
   output_mode TEXT,
   package_name TEXT,
+  query_aliases_json TEXT NOT NULL DEFAULT '{}',
   last_indexed_sha TEXT,
   last_indexed_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

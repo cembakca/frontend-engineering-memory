@@ -48,6 +48,8 @@ export interface RepositoryConfig {
   mainBranch?: string;
   managedCheckout?: boolean;
   remote?: string;
+  /** Repository vocabulary groups used to bridge product language and source-code terminology. */
+  queryAliases?: Record<string,string[]>;
 }
 
 export interface RepositoryRegistry {

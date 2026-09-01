@@ -42,6 +42,20 @@ test("implementation pack carries exemplars, edit surface and explicit verificat
   assert.ok(pack.answerContract.missingEvidence.some((item)=>item.path==="verification"));
 });
 
+test("verification-first packs preserve test gaps before optional exemplars",()=>{
+  const noisy=Array.from({length:20},(_,index)=>({id:index+1,repository:"repo",type:"error_handling" as const,
+    subject:`error-${index}`,content:"x".repeat(800),sourceFile:`src/error-${index}.ts`,commitSha:"sha",confidence:"verified" as const,
+    score:.5,channels:["fts" as const],canonicalEntity:`repo:error:${index}`}));
+  const pack=compileContextPack({kind:"implementation",query:"test strategy",repository:"repo",snapshotSha:"sha",
+    exemplars:noisy,verificationFirst:true,
+    verification:{commands:[{key:"script:build",name:"build",kind:"build",command:"next build",file:"package.json",line:8}],tests:[],edges:[],
+      gaps:[{kind:"missing-test-command",reason:"package.json has no test runner script"},{kind:"missing-test-files",reason:"No test files"}]},
+  },{maxChars:2_000});
+  assert.deepEqual(pack.verification.gaps.map((item)=>item.kind),["missing-test-command","missing-test-files"]);
+  assert.equal(pack.verification.commands[0]?.evidence.file,"package.json");
+  assert.ok(pack.budget.omitted.exemplars>0);
+});
+
 test("debug and change-review schemas expose only task-relevant sections",()=>{
   const debug=compileContextPack({kind:"debug",query:"why",repository:"repo",facts:[],trace:FLOW,checks:["check body"]});
   assert.equal(debug.kind,"debug");

@@ -104,6 +104,20 @@ test("keeps a sufficient report out of the backlog but inside the summary",async
   });
 });
 
+test("exports actionable feedback as an explicit incomplete evaluation draft",async()=>{
+  await withDatabase((memoryDb)=>{
+    const feedback=new AnswerFeedback(memoryDb);
+    feedback.record({repository:"fixture",signal:"wrong",query:"Yanlış route hangisi?"});
+    const draft=feedback.evaluationDraft("fixture");
+    assert.equal(draft.repository,"fixture");
+    assert.equal(draft.draft,true);
+    assert.equal(draft.ready,false);
+    assert.equal(draft.cases.length,1);
+    assert.ok(draft.blockers.some((item:string)=>item.includes("expectedEvidence")));
+    assert.ok(draft.blockers.some((item:string)=>item.includes("strictFact")));
+  });
+});
+
 test("moves an entry through triage and requires a case id to close it",async()=>{
   await withDatabase((memoryDb)=>{
     const feedback=new AnswerFeedback(memoryDb);

@@ -2,6 +2,8 @@
 
 This contract defines the task-level acceptance suite for retrieval correctness, evidence quality, abstention, and context economy. The checked-in catalog is a reference pilot; each new repository shape should contribute real questions and evidence expectations to `config/context-engine-eval.json`.
 
+The second checked-in project suite is `config/context-engine-eval.revolt.json`. It covers product-language route aliases, data flows, auth flow, impact, and repository verification. Run every applicable repository suite before expanding a rollout wave; a single pilot repository is not sufficient evidence for fleet quality.
+
 ## 1. Amaç
 
 Bu evaluation yalnız “ilgili memory ilk beşte mi?” sorusunu ölçmez. Context engine'in doğru görevi anlayıp anlamadığını, gerekli kanıtı getirip getirmediğini, agent'ın desteksiz iddia üretip üretmediğini ve source okumaya kıyasla gerçek context tasarrufunu ölçer.

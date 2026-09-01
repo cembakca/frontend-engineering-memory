@@ -54,6 +54,7 @@ test("supports Turkish and English mixed phrasing",()=>{
   assert.equal(classifyTaskIntent("Yeni route eklemek için implementation plan çıkar").intent,"implementation-plan");
   assert.equal(classifyTaskIntent("Which components are affected if this config değişirse?").intent,"impact");
   assert.equal(classifyTaskIntent("Which commands should I run, coverage boşluğu var mı?").intent,"verify");
+  assert.equal(classifyTaskIntent("Projenin automated-test ve doğrulama stratejisi nedir?").intent,"verify");
 });
 
 test("returns explainable scores and matched signals",()=>{

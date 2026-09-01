@@ -57,7 +57,7 @@ const RULES:Rule[]=[
   {intent:"debug",name:"broken-state",weight:8,pattern:/\b(?:bozuk\w*|broken|calismiyor|eksik|missing|unavailable)\b/},
 
   {intent:"verify",name:"verification-commands",weight:8,pattern:/\b(?:hangi komutlar|what commands|verification commands?|dogrulama adimlari|nasil dogrular)\b/},
-  {intent:"verify",name:"test-coverage",weight:8,pattern:/\b(?:automated test|test stratejisi|test strategy|test boslugu|coverage gap|coverage boslugu|hangi testler)\b/},
+  {intent:"verify",name:"test-coverage",weight:8,pattern:/\b(?:automated[- ]test|test stratejisi|test strategy|dogrulama stratejisi|test boslugu|coverage gap|coverage boslugu|hangi testler)\b/},
   {intent:"verify",name:"quality-gate",weight:6,pattern:/\b(?:lint|typecheck|type-check|test suite|ci checks?|quality gate)\b/},
 
   {intent:"change-review",name:"revision-diff",weight:8,pattern:/\b(?:diff|change review|degisiklik incele|review (?:this |the )?(?:change|pr)|before.{0,20}after)\b/},

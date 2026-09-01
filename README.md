@@ -44,13 +44,18 @@ Configure one or more repositories:
       "name": "company.web.next",
       "path": "/absolute/path/to/company.web.next",
       "mainBranch": "main",
-      "managedCheckout": false
+      "managedCheckout": false,
+      "queryAliases": {
+        "kullanıcının söylediği ürün terimi": ["SourceSymbol", "api-term"]
+      }
     }
   ]
 }
 ```
 
 Developer working trees should use `managedCheckout:false`. A service-owned clean clone may use `managedCheckout:true` with a configured remote. Dirty working trees are refused; the indexer never resets a developer checkout.
+
+`queryAliases` is optional. Each key and its values form a symmetric vocabulary group, allowing Turkish/product terminology to find differently named source symbols without changing the embedding model. Keep groups repository-specific and evidence-oriented; they are applied only when the query mentions a term in that group.
 
 Create the first index and verify it:
 

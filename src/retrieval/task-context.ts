@@ -15,6 +15,7 @@ import { TemporalContextEngine } from "./temporal.js";
 import { buildDecisionContext, isDecisionQuestion } from "./decision-context.js";
 import { createAnswerContract } from "./answer-contract.js";
 import { routesEquivalent } from "./route-identity.js";
+import { matchingAliasRoute, normalizeQueryAliases } from "./query-vocabulary.js";
 
 interface SemanticSnapshot {
   edges:GraphEdge[];
@@ -158,6 +159,7 @@ export class TaskContextCompiler {
     if (options.atSha) return this.temporal.contextAtSha(options.repository,options.atSha,question,maxChars);
     if (isDecisionQuestion(question)) return buildDecisionContext(this.store,options.repository,question,maxChars);
     const plan=planQuery(question,{repo:options.repository,memoryTypes:options.types});
+    const repositoryStrategy=isRepositoryStrategyQuestion(question);
     const repository=this.store.getRepository(options.repository);
     if (!repository) throw new Error(`Repository not found: ${options.repository}`);
     const snapshotSha=repository.last_indexed_sha as string|null;
@@ -201,7 +203,7 @@ export class TaskContextCompiler {
     // A repository-wide strategy question needs representative facts, not a
     // failure-path graph. Keep it below the source-read break-even point; the
     // repository profile is supplied by the companion repository tool.
-    if ((plan.intent==="debug"||plan.intent==="verify")&&isRepositoryStrategyQuestion(question)) {
+    if (plan.intent==="debug"&&repositoryStrategy) {
       return buildAgentContext(this.memoryDb,question,{repository:options.repository,memoryTypes:options.types,maxChars:Math.min(maxChars,4_000),
         metadata:{schemaVersion:"1.0",kind:"repository-strategy",intent:plan.intent,snapshotSha,...(freshness ? {freshness} : {})}});
     }
@@ -214,13 +216,25 @@ export class TaskContextCompiler {
         metadata:{schemaVersion:"1.0",kind:plan.intent,intent:plan.intent,snapshotSha,...(freshness ? {freshness} : {})},uncertainty:[reason]});
     }
 
-    const explicit=[...plan.anchors.symbols,...plan.anchors.files,...plan.anchors.config,...(plan.anchors.route ? [plan.anchors.route] : [])];
+    let aliases={};
+    try { aliases=normalizeQueryAliases(JSON.parse(String(repository.query_aliases_json ?? "{}"))); } catch {}
+    const aliasRoute=matchingAliasRoute(question,[aliases],semantic.routes.map((route)=>route.route));
+    const resolvedRoute=plan.anchors.route ?? aliasRoute;
+    const routeSource=resolvedRoute
+      ? semantic.routes.find((route)=>routesEquivalent(route.route,resolvedRoute))?.sourceFile
+      : undefined;
+    const explicit=[...plan.anchors.symbols,...plan.anchors.files,...plan.anchors.config,
+      ...(routeSource ? [routeSource] : []),...(resolvedRoute ? [resolvedRoute] : [])];
     // Traversal packs use hybrid results only as targeted source fallback, so a
     // wider file set improves recall without injecting extra facts into the pack.
     // Fact-bearing debug packs stay tight; implementation needs a few exemplars.
     const retrievalLimit=plan.intent==="explain-flow"||plan.intent==="impact" ? 20
       : plan.intent==="implementation-plan"||plan.intent==="verify" ? 15 : 10;
-    const ranked=await hybridSearch(this.memoryDb,question,{repo:options.repository,memoryTypes:options.types,limit:retrievalLimit});
+    // A repository-wide verification question that explicitly names a semantic
+    // surface (for example error handling) needs facts from that surface plus
+    // the verification graph, not unrelated high-quality repository memories.
+    const focusedTypes=options.types ?? (plan.intent==="verify"&&repositoryStrategy&&plan.memoryTypes.length ? plan.memoryTypes : undefined);
+    const ranked=await hybridSearch(this.memoryDb,question,{repo:options.repository,memoryTypes:focusedTypes,limit:retrievalLimit});
     const fallbackFiles=[...new Set(ranked.flatMap((item)=>item.sourceFiles ?? (item.sourceFile ? [item.sourceFile] : [])))];
     const rankedSymbols=ranked.flatMap((item)=>item.sourceFile&&item.sourceSymbol ? [`${item.sourceFile}#${item.sourceSymbol}`] : []);
 
@@ -254,7 +268,7 @@ export class TaskContextCompiler {
       const seed=resolveSeed(question,semantic.edges,explicit,"impact");
       const impact=seed ? traceImpact(semantic.edges,seed,{routes:semantic.routes}) : undefined;
       return compileContextPack({freshness,kind:"implementation",query:question,repository:options.repository,snapshotSha,
-        exemplars:ranked,impact,verification,sourceFallback:fallbackFiles},{maxChars});
+        exemplars:ranked,impact,verification,verificationFirst:plan.intent==="verify",sourceFallback:fallbackFiles},{maxChars});
     }
 
     if (plan.intent==="debug") {

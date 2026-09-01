@@ -91,7 +91,7 @@ interface CommonInput { query:string;repository:string;snapshotSha?:string|null;
 export type ContextPackInput=
   |(CommonInput&{kind:"flow";trace:FlowTrace})
   |(CommonInput&{kind:"impact";trace:ImpactTrace})
-  |(CommonInput&{kind:"implementation";exemplars:SearchResult[];impact?:ImpactTrace;verification?:VerificationGraph})
+  |(CommonInput&{kind:"implementation";exemplars:SearchResult[];impact?:ImpactTrace;verification?:VerificationGraph;verificationFirst?:boolean})
   |(CommonInput&{kind:"debug";facts:SearchResult[];trace?:FlowTrace;checks?:string[]})
   |(CommonInput&{kind:"change-review";changes:Array<{operation:string;entity:string;file?:string|null;fromSha?:string|null;toSha?:string|null}>;impact?:ImpactTrace;verification?:VerificationGraph});
 
@@ -264,6 +264,17 @@ export function compileContextPack(input:ContextPackInput,options:{maxChars?:num
   if (input.kind==="implementation") {
     const pack:ImplementationContextPack={...base(input,maxChars),kind:"implementation",exemplars:[],
       editSurface:{files:[],routes:[],components:[],config:[]},verification:{commands:[],tests:[],gaps:[]}};
+    const checks=verification(input.verification);
+    const appendChecks=()=>{
+      // Missing validation is more important than a long list of equivalent
+      // script variants. Repository-wide target gaps are useful but must not
+      // crowd package scripts and global test-infrastructure gaps out.
+      for (const item of checks.gaps.filter((gap)=>!gap.target)) append(pack,pack.verification.gaps,item,"verification.gaps",effectiveMax);
+      for (const item of checks.commands) append(pack,pack.verification.commands,item,"verification.commands",effectiveMax);
+      for (const item of checks.tests) append(pack,pack.verification.tests,item,"verification.tests",effectiveMax);
+      for (const item of checks.gaps.filter((gap)=>gap.target)) append(pack,pack.verification.gaps,item,"verification.gaps",effectiveMax);
+    };
+    if (input.verificationFirst) appendChecks();
     for (const item of input.exemplars) append(pack,pack.exemplars,fact(item),"exemplars",effectiveMax);
     if (input.impact) {
       copyStrings(pack,pack.editSurface.files,input.impact.files,"editSurface.files",effectiveMax);
@@ -271,10 +282,7 @@ export function compileContextPack(input:ContextPackInput,options:{maxChars?:num
       copyStrings(pack,pack.editSurface.components,input.impact.components,"editSurface.components",effectiveMax);
       copyStrings(pack,pack.editSurface.config,input.impact.config,"editSurface.config",effectiveMax);
     }
-    const checks=verification(input.verification);
-    for (const item of checks.commands) append(pack,pack.verification.commands,item,"verification.commands",effectiveMax);
-    for (const item of checks.tests) append(pack,pack.verification.tests,item,"verification.tests",effectiveMax);
-    for (const item of checks.gaps) append(pack,pack.verification.gaps,item,"verification.gaps",effectiveMax);
+    if (!input.verificationFirst) appendChecks();
     return finalize(pack,input);
   }
 

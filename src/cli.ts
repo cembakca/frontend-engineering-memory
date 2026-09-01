@@ -23,7 +23,7 @@ import { readJson } from "./utils/fs.js";
 import type { DecisionInput } from "./memory/decisions.js";
 
 function help(): void {
-  console.log(`Frontend Engineering Memory\n\nCommands:\n  repos\n  status\n  full <repository>\n  full-all\n  sync <repository>\n  sync-all\n  reconcile <repository>\n  reconcile-all\n  vectors [repository]\n  embedding-status\n  ai-extract <repository> [--file=src/path.ts]\n  routes <repository>\n  dependencies <repository>\n  route-dependencies <repository> [--route=/path]\n  changes <repository> [--since=<commit>]\n  snapshots <repository>\n  behavior-diff <repository> --from=<sha> --to=<sha>\n  context-at <repository> --sha=<sha> <question>\n  decisions <repository> [query]\n  decision-add <repository> --file=<decision.json>\n  search <query> [--repo=<repository>] [--limit=10]\n  quality [repository]\n  evaluate [evaluation.json]\n  context-eval [evaluation.json]\n  context-economy [--run=<run.json>] [--policy=<AGENTS.md>]\n  telemetry [repository] [--recent=20] [--limit=200] [--prune]\n  freshness [repository]\n  security-audit [repository]\n  pilot-gate [--candidate=<repository>] [--run=<eval.json>] [--economy=<economy.json>]\n  rollout-status [--run=<eval.json>] [--economy=<economy.json>]\n  feedback add <repository> --signal=<sufficient|source-needed|wrong|stale> [--event=<id>] [--query=<text>] [--note=<text>] [--reporter=<who>]\n  feedback backlog [repository] [--state=<new|triaged|case-created|dismissed>] [--limit=50]\n  feedback triage <queryHash> --signal=<signal> --state=<state> [--case=<caseId>]\n  serve\n`);
+  console.log(`Frontend Engineering Memory\n\nCommands:\n  repos\n  status\n  full <repository>\n  full-all\n  sync <repository>\n  sync-all\n  reconcile <repository>\n  reconcile-all\n  vectors [repository]\n  embedding-status\n  ai-extract <repository> [--file=src/path.ts]\n  routes <repository>\n  dependencies <repository>\n  route-dependencies <repository> [--route=/path]\n  changes <repository> [--since=<commit>]\n  snapshots <repository>\n  behavior-diff <repository> --from=<sha> --to=<sha>\n  context-at <repository> --sha=<sha> <question>\n  decisions <repository> [query]\n  decision-add <repository> --file=<decision.json>\n  search <query> [--repo=<repository>] [--limit=10]\n  quality [repository]\n  evaluate [evaluation.json]\n  context-eval [evaluation.json]\n  context-economy [--run=<run.json>] [--policy=<AGENTS.md>]\n  telemetry [repository] [--recent=20] [--limit=200] [--prune]\n  freshness [repository]\n  security-audit [repository]\n  pilot-gate [--candidate=<repository>] [--run=<eval.json>] [--economy=<economy.json>]\n  rollout-status [--run=<eval.json>] [--economy=<economy.json>]\n  feedback add <repository> --signal=<sufficient|source-needed|wrong|stale> [--event=<id>] [--query=<text>] [--note=<text>] [--reporter=<who>]\n  feedback backlog [repository] [--state=<new|triaged|case-created|dismissed>] [--limit=50]\n  feedback export <repository> [--state=<new|triaged>] [--limit=50]\n  feedback triage <queryHash> --signal=<signal> --state=<state> [--case=<caseId>]\n  serve\n`);
 }
 
 async function main(): Promise<void> {
@@ -174,12 +174,17 @@ async function main(): Promise<void> {
         const limit=flag("limit");
         console.log(JSON.stringify({summary:feedback.summary(name),
           backlog:feedback.backlog(name,{state:flag("state") as BacklogState|undefined,limit:limit?Number(limit):undefined})},null,2));
+      } else if (sub === "export") {
+        const name=args[1]; if (!name||name.startsWith("--")) throw new Error("repository name is required");
+        const limit=flag("limit");
+        console.log(JSON.stringify(feedback.evaluationDraft(name,
+          {state:flag("state") as BacklogState|undefined,limit:limit?Number(limit):undefined}),null,2));
       } else if (sub === "triage") {
         const hash=args[1]; if (!hash) throw new Error("queryHash is required");
         const signal=flag("signal") as FeedbackSignal|undefined; if (!signal) throw new Error("--signal is required");
         const state=flag("state") as BacklogState|undefined; if (!state) throw new Error("--state is required");
         console.log(JSON.stringify({updated:feedback.updateState(hash,signal,state,flag("case"))},null,2));
-      } else throw new Error("feedback subcommand must be add, backlog or triage");
+      } else throw new Error("feedback subcommand must be add, backlog, export or triage");
     } else if (command === "context-economy") {
       const runArg=args.find((x)=>x.startsWith("--run="));
       const policyArg=args.find((x)=>x.startsWith("--policy="));

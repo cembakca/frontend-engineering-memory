@@ -5,6 +5,7 @@ import type { MemoryDatabase } from "./database.js";
 import type { GraphEdge } from "../analyzers/symbol-graph.js";
 import { validateDecision, type DecisionInput } from "./decisions.js";
 import { routesEquivalent } from "../retrieval/route-identity.js";
+import { normalizeQueryAliases } from "../retrieval/query-vocabulary.js";
 
 /** Bump when deterministic extraction semantics change for unchanged source files. */
 const DETERMINISTIC_ANALYZER_REVISION="rce-030-v2";
@@ -20,21 +21,23 @@ export class MemoryStore {
 
   upsertRepository(config: RepositoryConfig, profile: RepositoryProfile): number {
     this.db.prepare(`
-      INSERT INTO repositories(name,path,main_branch,framework,next_version,react_version,node_version,router_type,package_manager,build_command,start_command,dev_command,output_mode,package_name,updated_at)
-      VALUES(@name,@path,@mainBranch,@framework,@nextVersion,@reactVersion,@nodeVersion,@routerType,@packageManager,@buildCommand,@startCommand,@devCommand,@outputMode,@packageName,CURRENT_TIMESTAMP)
+      INSERT INTO repositories(name,path,main_branch,framework,next_version,react_version,node_version,router_type,package_manager,build_command,start_command,dev_command,output_mode,package_name,query_aliases_json,updated_at)
+      VALUES(@name,@path,@mainBranch,@framework,@nextVersion,@reactVersion,@nodeVersion,@routerType,@packageManager,@buildCommand,@startCommand,@devCommand,@outputMode,@packageName,@queryAliases,CURRENT_TIMESTAMP)
       ON CONFLICT(name) DO UPDATE SET
         path=excluded.path, main_branch=excluded.main_branch, framework=excluded.framework,
         next_version=excluded.next_version, react_version=excluded.react_version,
         node_version=excluded.node_version, router_type=excluded.router_type,
         package_manager=excluded.package_manager, build_command=excluded.build_command,
         start_command=excluded.start_command, dev_command=excluded.dev_command,
-        output_mode=excluded.output_mode, package_name=excluded.package_name, updated_at=CURRENT_TIMESTAMP
+        output_mode=excluded.output_mode, package_name=excluded.package_name,
+        query_aliases_json=excluded.query_aliases_json, updated_at=CURRENT_TIMESTAMP
     `).run({
       name: config.name, path: config.path, mainBranch: config.mainBranch ?? "main",
       framework: profile.framework, nextVersion: profile.nextVersion, reactVersion: profile.reactVersion,
       nodeVersion: profile.nodeVersion, routerType: profile.routerType, packageManager: profile.packageManager,
       buildCommand: profile.buildCommand, startCommand: profile.startCommand, devCommand: profile.devCommand,
       outputMode: profile.outputMode, packageName:profile.packageName,
+      queryAliases:JSON.stringify(normalizeQueryAliases(config.queryAliases)),
     });
     const row = this.db.prepare("SELECT id FROM repositories WHERE name=?").get(config.name) as { id: number };
     return row.id;

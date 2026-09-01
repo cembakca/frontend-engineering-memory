@@ -54,12 +54,13 @@ Batch commands isolate failures per repository and return a non-zero exit code i
 Grow through the configured `2 → 4 → 8 → 16` waves. At every wave:
 
 1. Add repository entries to the local `config/repositories.json`.
-2. Add representative real questions to `config/context-engine-eval.json`.
-3. Run `full` for a new architecture shape, then `full-all`.
-4. Check embeddings, security, freshness, and repository quality.
-5. Run the context evaluation and economy report.
-6. Pass their files to `pilot-gate`/`rollout-status` when they are not at the default local paths.
-7. Do not expand while the decision is `hold` or evidence is insufficient.
+2. Add repository-specific `queryAliases` only for established product/source vocabulary mismatches.
+3. Add representative real questions to `config/context-engine-eval.json`.
+4. Run `full` for a new architecture shape, then `full-all`.
+5. Check embeddings, security, freshness, and repository quality.
+6. Run the context evaluation and economy report.
+7. Pass their files to `pilot-gate`/`rollout-status` when they are not at the default local paths.
+8. Do not expand while the decision is `hold` or evidence is insufficient.
 
 Health floors are defined in `config/rollout-gates.json`; they currently require:
 
@@ -81,6 +82,14 @@ pnpm memory rollout-status
 ```
 
 Incremental sync always reconciles routes, analyzes changed source surfaces, deactivates stale memories, updates snapshots, and embeds only new facts. An unchanged clean repository returns `NOOP`.
+
+Actionable feedback can be exported into an evaluation-suite draft:
+
+```bash
+pnpm memory feedback export company.web.next --state=triaged
+```
+
+The export deliberately remains `ready:false` until a human supplies the exact question when telemetry text was disabled, expected source evidence, and the strict fact. This prevents an unreviewed complaint from becoming a weak regression test.
 
 Enable scheduled drift reconciliation while the HTTP service runs:
 
