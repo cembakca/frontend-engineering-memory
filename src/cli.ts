@@ -60,17 +60,25 @@ async function main(): Promise<void> {
     } else if (command === "onboard") {
       const requested=args.find((item)=>!item.startsWith("--"));
       const registry=await loadRegistry();
-      const fleet=await readJson<any>(path.join(projectRoot(),"config/evaluation-fleet.json"));
-      const assigned=new Set((fleet?.repositories ?? []).map((item:any)=>item.repository));
+      const fleetManifest=await readJson<any>(path.join(projectRoot(),"config/evaluation-fleet.json"));
+      const assigned=new Set((fleetManifest?.repositories ?? []).map((item:any)=>item.repository));
       const names=requested ? [requested] : registry.repositories
         .map((item)=>item.name).filter((name)=>args.includes("--all")||!store.getRepository(name)||!assigned.has(name));
+      const batch=names.length>1;
       const results=[];
       for (const name of names) {
-        try { results.push({ok:true,...await onboardRepository(memoryDb,name,{evaluate:args.includes("--evaluate")})}); }
-        catch (error) { results.push({ok:false,repository:name,error:(error as Error).message}); }
+        try {
+          results.push({ok:true,...await onboardRepository(memoryDb,name,{
+            evaluate:args.includes("--evaluate")&&!batch,
+            validateFleet:!batch,
+          })});
+        } catch (error) { results.push({ok:false,repository:name,error:(error as Error).message}); }
       }
-      console.log(JSON.stringify({processed:results.length,results},null,2));
-      if (results.some((item:any)=>!item.ok||item.fleet?.decision==="hold")) process.exitCode=1;
+      const fleet=batch
+        ? await runEvaluationFleet(memoryDb,path.join(projectRoot(),"config/evaluation-fleet.json"),{validateOnly:!args.includes("--evaluate")})
+        : results[0]?.fleet ?? null;
+      console.log(JSON.stringify({processed:results.length,results,fleet},null,2));
+      if (results.some((item:any)=>!item.ok)||fleet?.decision==="hold") process.exitCode=1;
     } else if (command === "status") {
       console.table(store.listRepositories().map((r:any)=>({name:r.name,next:r.next_version,router:r.router_type,lastSha:r.last_indexed_sha,indexedAt:r.last_indexed_at})));
     } else if (command === "full" || command === "sync" || command === "reconcile") {

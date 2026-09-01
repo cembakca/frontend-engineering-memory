@@ -41,7 +41,7 @@ async function writeJson(file:string,value:unknown):Promise<void> {
 }
 
 /** Registry is the only hand-authored input; all fleet artifacts are derived. */
-export async function onboardRepository(memoryDb:MemoryDatabase,repository:string,options:{evaluate?:boolean}={}):Promise<any> {
+export async function onboardRepository(memoryDb:MemoryDatabase,repository:string,options:{evaluate?:boolean;validateFleet?:boolean}={}):Promise<any> {
   const config=await getRepositoryConfig(repository);
   const index=await fullIndex(config,memoryDb);
   const classification=inferArchitectureFamily(memoryDb,repository);
@@ -60,6 +60,10 @@ export async function onboardRepository(memoryDb:MemoryDatabase,repository:strin
     else manifest.repositories.push({repository,family,role,suite:suiteName});
     await writeJson(manifestFile,manifest);
   }
-  const fleet=await runEvaluationFleet(memoryDb,manifestFile,{validateOnly:!options.evaluate});
+  // Batch onboard validates once after every pending repo is assigned; mid-batch
+  // fleet checks falsely fail on still-queued registry entries.
+  const fleet=options.validateFleet===false
+    ? null
+    : await runEvaluationFleet(memoryDb,manifestFile,{validateOnly:!options.evaluate});
   return {repository,index,classification,suite:suiteName,suiteMode:generatedAssignment?"generated":"curated-preserved",fleet};
 }
