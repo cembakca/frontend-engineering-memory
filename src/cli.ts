@@ -1,5 +1,5 @@
 import path from "node:path";
-import { getRepositoryConfig, loadRegistry, projectRoot } from "./config.js";
+import { getRepositoryConfig, loadRegistry, projectRoot, registryPath, resolveRepositoryConfig, workspacePath } from "./config.js";
 import { MemoryDatabase } from "./memory/database.js";
 import { MemoryStore } from "./memory/store.js";
 import { rebuildVectors } from "./memory/vectorize.js";
@@ -54,9 +54,36 @@ async function main(): Promise<void> {
 
   if (command === "serve") { startServer(memoryDb); return; }
   try {
-    if (command === "repos") {
+    if (command === "repo-add") {
+      const name=args[0]; if (!name) throw new Error("repository name is required");
+      const flag=(key:string)=>args.find((item)=>item.startsWith(`--${key}=`))?.slice(key.length+3);
+      const url=flag("url"); const explicitPath=flag("path");
+      if (!url&&!explicitPath) throw new Error("either --url or --path is required");
+
+      const file=registryPath();
+      const { readFile, writeFile }=await import("node:fs/promises");
+      const registry=JSON.parse(await readFile(file,"utf8")) as {repositories:any[]};
+      if (registry.repositories.some((item)=>item.name===name)) throw new Error(`Repository already registered: ${name}`);
+
+      const entry:Record<string,unknown>={name};
+      if (url) entry.url=url; else entry.path=explicitPath;
+      entry.mainBranch=flag("branch") ?? "main";
+      if (url&&flag("remote")) entry.remote=flag("remote");
+      registry.repositories.push(entry);
+      await writeFile(file,`${JSON.stringify(registry,null,2)}\n`);
+
+      const resolved=resolveRepositoryConfig(entry as any);
+      console.log(JSON.stringify({added:entry,checkout:resolved.path,
+        managedCheckout:resolved.managedCheckout,
+        next:`memory full ${name}`},null,2));
+    } else if (command === "repos") {
       const registry=await loadRegistry();
-      console.table(registry.repositories.map((r)=>({name:r.name,path:r.path,branch:r.mainBranch ?? "main"})));
+      console.table(registry.repositories.map((entry)=>{
+        const resolved=resolveRepositoryConfig(entry);
+        return {name:entry.name,source:entry.url ?? entry.path,checkout:resolved.path,
+          branch:resolved.mainBranch,managed:resolved.managedCheckout};
+      }));
+      console.log(`workspace: ${workspacePath()}`);
     } else if (command === "onboard") {
       const requested=args.find((item)=>!item.startsWith("--"));
       const registry=await loadRegistry();

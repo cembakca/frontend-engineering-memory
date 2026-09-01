@@ -17,19 +17,37 @@ Use `managedCheckout:false` for a developer working tree:
 }
 ```
 
-Use `managedCheckout:true` only when the service owns a dedicated clean clone:
+Give a `url` when the service should own the checkout. No path, no manual clone:
 
 ```json
 {
   "name": "company.web.next",
-  "path": "/srv/frontend-memory/repos/company.web.next",
-  "mainBranch": "main",
-  "managedCheckout": true,
-  "remote": "origin"
+  "url": "git@gitlab.com:company/company.web.next.git",
+  "mainBranch": "main"
 }
 ```
 
-Managed sync fetches the configured remote and refreshes only that dedicated checkout. A dirty checkout is refused in either mode.
+The engine clones into `MEMORY_WORKSPACE` (default `data/repos/<name>`) on first sync, then fetches
+and hard-resets to `<remote>/<branch>` on every sync after that. `managedCheckout` defaults to true
+whenever a `url` is present, so it does not need to be written out.
+
+Register one without editing the file by hand:
+
+```bash
+pnpm memory repo-add company.web.next --url=git@gitlab.com:company/company.web.next.git
+pnpm memory sync company.web.next        # clones, then full-indexes on first run
+```
+
+Pointing an existing service-owned checkout at a different `url` is refused rather than silently
+re-used: indexing the wrong repository under a familiar name is worse than a failed sync. Move the
+old checkout aside or fix the registry.
+
+`path` and `url` may both be given when the clone must live somewhere specific. Credentials are the
+host's: the engine shells out to `git`, so SSH keys or a credential helper must already work for the
+user running the service.
+
+Managed sync refreshes only that dedicated checkout. A dirty checkout is refused in either mode —
+but a service-owned checkout is never dirty in practice, because nobody works in it.
 
 ## First index
 
@@ -105,6 +123,36 @@ The scheduler is a safety net. A CI sync after each main merge gives lower fresh
 
 Examples live under `ci/`. For HTTP-triggered indexing, send the full expected 40-character commit SHA. The server rejects ambiguous or stale commit expectations.
 
+### Jenkins on merge to main
+
+With a `url`-defined repository the pipeline needs no checkout of its own and no shared filesystem
+with the memory service — it posts the commit and the service fetches it:
+
+```groovy
+pipeline {
+  agent any
+  stages {
+    stage('Sync engineering memory') {
+      when { branch 'main' }
+      steps {
+        sh """
+          curl --fail --silent --show-error --max-time 600 \
+            -X POST "\$FRONTEND_MEMORY_URL/sync" \
+            -H 'content-type: application/json' \
+            -d '{"repository":"company.web.next","commit":"\$GIT_COMMIT"}'
+        """
+      }
+    }
+  }
+}
+```
+
+`POST /sync` is safe as the only trigger: a repository that has never been indexed falls back to a
+full index automatically, and one whose last indexed SHA is not an ancestor of the new head does the
+same. Writes are queued, so concurrent pipelines cannot interleave two index runs.
+
+Use the repository's registry `name`, not `JOB_BASE_NAME`, unless the two are guaranteed equal.
+
 The service binds to localhost by default. If it must be exposed to a network, place it behind an authenticated reverse proxy before changing `MEMORY_HOST`.
 
 ## Evaluation artifacts
@@ -136,6 +184,17 @@ Before a model/profile migration, use a separate database or preserve the existi
 ### Working tree must be clean
 
 Commit, stash, or revert changes in the target repository. The indexer deliberately refuses to label uncommitted files with the current commit SHA.
+
+If this keeps interrupting an automated flow, the repository is registered as a developer working
+tree. Re-register it with a `url` so the service owns a clone of its own and stops depending on
+whatever state a developer left behind.
+
+### Clone refuses to start
+
+`Refusing to clone into a non-empty directory` means the workspace path already holds something the
+engine did not create. Remove it or point `MEMORY_WORKSPACE` elsewhere.
+
+`Checkout at … points at …` means the registry `url` changed after the clone existed.
 
 ### MCP client sees an old schema
 

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { RepositoryConfig, RepositoryRegistry } from "./types.js";
+import type { RepositoryConfig, RepositoryRegistry, RepositoryRegistryEntry } from "./types.js";
 
 const PROJECT_ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 
@@ -30,6 +30,17 @@ export function dbPath(): string {
   return configured ? (path.isAbsolute(configured) ? configured : path.resolve(PROJECT_ROOT,configured)) : path.join(PROJECT_ROOT,"data/engineering-memory.sqlite");
 }
 
+/**
+ * Where service-owned clones live. A repository defined by URL needs no path in
+ * the registry: the engine owns the checkout, so it decides where it goes.
+ */
+export function workspacePath(): string {
+  const configured=process.env.MEMORY_WORKSPACE;
+  return configured
+    ? (path.isAbsolute(configured) ? configured : path.resolve(PROJECT_ROOT,configured))
+    : path.join(PROJECT_ROOT,"data/repos");
+}
+
 export function registryPath(): string {
   const configured=process.env.MEMORY_REPOSITORIES_FILE;
   return configured ? (path.isAbsolute(configured) ? configured : path.resolve(PROJECT_ROOT,configured)) : path.join(PROJECT_ROOT,"config/repositories.json");
@@ -45,11 +56,29 @@ export async function loadRegistry(): Promise<RepositoryRegistry> {
   return parsed;
 }
 
+/** Resolves a registry entry into a fully specified configuration. */
+export function resolveRepositoryConfig(entry: RepositoryRegistryEntry): RepositoryConfig {
+  if (!entry.path && !entry.url) {
+    throw new Error(`Repository ${entry.name} needs either a path or a url`);
+  }
+  const resolvedPath = entry.path
+    ? (path.isAbsolute(entry.path) ? entry.path : path.resolve(PROJECT_ROOT,entry.path))
+    : path.join(workspacePath(),entry.name);
+  return {
+    ...entry,
+    path: resolvedPath,
+    mainBranch: entry.mainBranch ?? "main",
+    // A clone URL means the engine owns the checkout, so refreshing it is safe by default.
+    managedCheckout: entry.managedCheckout ?? Boolean(entry.url),
+    remote: entry.remote ?? "origin",
+  };
+}
+
 export async function getRepositoryConfig(name: string): Promise<RepositoryConfig> {
   const registry = await loadRegistry();
   const repo = registry.repositories.find((item) => item.name === name);
   if (!repo) throw new Error(`Repository not found in ${registryPath()}: ${name}`);
-  return { ...repo, path: path.isAbsolute(repo.path) ? repo.path : path.resolve(PROJECT_ROOT,repo.path), mainBranch: repo.mainBranch ?? "main" };
+  return resolveRepositoryConfig(repo);
 }
 
 export function embeddingsEnabled(): boolean {

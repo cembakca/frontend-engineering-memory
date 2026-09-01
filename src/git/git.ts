@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdir, readdir } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
 import type { ChangedFile } from "../types.js";
 
@@ -90,6 +92,50 @@ export async function changedFiles(repoPath: string, fromSha: string, toSha: str
     if (!parts[1]) return [];
     return [{ status, path: parts[1] }];
   });
+}
+
+/** Configured URL of a remote, or null when the remote is not defined. */
+export async function getRemoteUrl(repoPath: string, remote = "origin"): Promise<string | null> {
+  try { return await git(repoPath,["remote","get-url",remote]); }
+  catch { return null; }
+}
+
+/** Compares clone URLs ignoring the noise that does not change which repository is addressed. */
+export function sameRemote(a: string, b: string): boolean {
+  const normalize = (value: string) => value.trim()
+    .replace(/\.git$/,"")
+    .replace(/\/+$/,"")
+    .replace(/^git@([^:]+):/,"https://$1/")
+    .replace(/^ssh:\/\/git@/,"https://")
+    .replace(/^https?:\/\/[^@/]+@/,"https://")
+    .toLowerCase();
+  return normalize(a) === normalize(b);
+}
+
+/**
+ * Clones a service-owned checkout, or verifies that the existing one addresses
+ * the configured repository.
+ *
+ * The verification matters: if the registry URL changes and the old clone stays
+ * on disk, indexing would silently keep describing the wrong repository.
+ */
+export async function ensureManagedCheckout(repoPath: string, url: string, branch: string, remote = "origin"): Promise<"cloned" | "reused"> {
+  if (await isGitRepository(repoPath)) {
+    const existing = await getRemoteUrl(repoPath,remote);
+    if (existing && !sameRemote(existing,url)) {
+      throw new Error(`Checkout at ${repoPath} points at ${existing}, not the configured ${url}. Move it aside or fix the registry.`);
+    }
+    if (!existing) await git(repoPath,["remote","add",remote,url]);
+    return "reused";
+  }
+
+  let entries: string[] = [];
+  try { entries = await readdir(repoPath); } catch { /* absent is the normal case */ }
+  if (entries.length) throw new Error(`Refusing to clone into a non-empty directory that is not a repository: ${repoPath}`);
+
+  await mkdir(path.dirname(repoPath),{recursive:true});
+  await execFileAsync("git",["clone","--branch",branch,"--origin",remote,url,repoPath],{maxBuffer:20*1024*1024});
+  return "cloned";
 }
 
 export async function refreshManagedCheckout(repoPath: string, branch: string, remote = "origin"): Promise<void> {

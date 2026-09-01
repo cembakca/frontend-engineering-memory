@@ -44,16 +44,23 @@ export type MemoryType =
 
 export interface RepositoryConfig {
   name: string;
+  /** Where the checkout lives. Optional when `url` is set: the workspace path is derived from the name. */
   path: string;
+  /** Clone URL. Its presence makes the checkout service-owned, so `managedCheckout` defaults to true. */
+  url?: string;
   mainBranch?: string;
   managedCheckout?: boolean;
+  /** Remote *name*, not a URL. */
   remote?: string;
   /** Repository vocabulary groups used to bridge product language and source-code terminology. */
   queryAliases?: Record<string,string[]>;
 }
 
+/** A registry entry may omit `path` when it supplies `url`. */
+export type RepositoryRegistryEntry = Omit<RepositoryConfig,"path"> & { path?: string };
+
 export interface RepositoryRegistry {
-  repositories: RepositoryConfig[];
+  repositories: RepositoryRegistryEntry[];
 }
 
 export interface RepositoryProfile {
