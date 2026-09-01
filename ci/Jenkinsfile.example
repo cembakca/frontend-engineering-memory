@@ -1,18 +1,21 @@
+// Posts the merged commit to the memory service. The service owns the checkout
+// (registry `url`), so this pipeline needs no clone of its own and no shared
+// filesystem with the service.
 pipeline {
   agent any
 
+  environment {
+    // Full URL of the running memory service, e.g. http://memory.internal:4317
+    FRONTEND_MEMORY_URL = "${env.FRONTEND_MEMORY_URL}"
+    // The name used in config/repositories.json, which need not equal the job name.
+    MEMORY_REPOSITORY_NAME = 'company.web.next'
+  }
+
   stages {
-    stage('Notify Frontend Engineering Memory') {
-      when {
-        branch 'main'
-      }
+    stage('Sync engineering memory') {
+      when { branch 'main' }
       steps {
-        sh '''
-          curl --fail --silent --show-error \
-            -X POST "$FRONTEND_MEMORY_URL/sync" \
-            -H 'content-type: application/json' \
-            -d "{\\"repository\\":\\"${JOB_BASE_NAME}\\",\\"commit\\":\\"${GIT_COMMIT}\\"}"
-        '''
+        sh 'ci/sync-after-main.sh'
       }
     }
   }

@@ -19,6 +19,10 @@ Komutlar `frontend-engineering-memory` dizininden çalıştırılmalıdır. Örn
 ## 2. İki temel kural
 
 1. Hedef repository bir commit üzerinde ve tamamen clean olmalıdır. Engine uncommitted source'u mevcut commit SHA'sına aitmiş gibi indexlemez.
+   **Bu kuralı devre dışı bırakmanın yolu, kuralı gevşetmek değil sahipliği değiştirmektir:** registry'de
+   `path` yerine `url` verirseniz checkout'u engine kendisi klonlar ve her sync'te remote'a hard-reset
+   eder. Kimsenin içinde çalışmadığı bir checkout hiçbir zaman kirli olmaz, dolayısıyla her seferinde
+   `git status` bakmanız gerekmez. Jenkins entegrasyonu da bunu şart koşar.
 2. Evaluation suite içindeki `targetSha`, indexlenen ve test edilen gerçek commit olmalıdır. Sadece gate'i geçirmek için SHA değiştirilmez.
 
 Kontrol:

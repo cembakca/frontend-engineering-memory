@@ -12,3 +12,5 @@ eval-results/
 .pnp.*
 .yarn/
 yarn.lock
+# Service-owned clones created from registry `url` entries.
+data/repos/

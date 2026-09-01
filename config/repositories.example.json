@@ -1,17 +1,20 @@
 {
   "repositories": [
     {
-      "name": "hangikredi.example.fe.next",
-      "path": "/absolute/path/to/hangikredi.example.fe.next",
-      "mainBranch": "main",
-      "managedCheckout": false
+      "name": "hangikredi.deposit.fe.next",
+      "url": "git@gitlab.com:hangikredi/hangikredi.deposit.fe.next.git",
+      "mainBranch": "main"
     },
     {
-      "name": "memory-managed-project",
-      "path": "/srv/frontend-memory/repos/memory-managed-project",
+      "name": "acme.web",
+      "url": "https://github.com/acme/web.git",
       "mainBranch": "main",
-      "managedCheckout": true,
       "remote": "origin"
+    },
+    {
+      "name": "local-working-copy",
+      "path": "../local-working-copy",
+      "mainBranch": "main"
     }
   ]
 }

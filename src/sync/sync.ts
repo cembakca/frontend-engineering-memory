@@ -5,7 +5,7 @@ import {
   canonicalizeMemories, dependencyMemories, listAnalyzableSourceFiles, listProjectAnalysisFiles, repositoryProfileMemory,
   routeMemory, scanRoutes,
 } from "../analyzers/index.js";
-import { assertRepositorySnapshot, changedFiles, isAncestor, isGitRepository, refreshManagedCheckout } from "../git/git.js";
+import { assertRepositorySnapshot, changedFiles, ensureManagedCheckout, isAncestor, isGitRepository, refreshManagedCheckout } from "../git/git.js";
 import type { MemoryDatabase } from "../memory/database.js";
 import { MemoryStore } from "../memory/store.js";
 import { persistVectors, prepareVectors } from "../memory/vectorize.js";
@@ -19,9 +19,14 @@ const SOURCE_EXT=/\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 async function exists(file:string):Promise<boolean> { try { await access(file); return true; } catch { return false; } }
 
 async function baseline(config:RepositoryConfig,memoryDb:MemoryDatabase,options:SyncOptions) {
-  if (!(await isGitRepository(config.path))) throw new Error(`Not a Git repository: ${config.path}`);
   const mainBranch=config.mainBranch ?? "main";
-  if (config.managedCheckout) await refreshManagedCheckout(config.path,mainBranch,config.remote ?? "origin");
+  // The checkout is prepared before it is asserted: a URL-defined repository is
+  // not on disk until the engine clones it.
+  if (config.managedCheckout) {
+    if (config.url) await ensureManagedCheckout(config.path,config.url,mainBranch,config.remote ?? "origin");
+    await refreshManagedCheckout(config.path,mainBranch,config.remote ?? "origin");
+  }
+  if (!(await isGitRepository(config.path))) throw new Error(`Not a Git repository: ${config.path}`);
   const head=await assertRepositorySnapshot(config.path,mainBranch,options.expectedCommit);
   const profile=await analyzeRepositoryProfile(config.name,config.path);
   const store=new MemoryStore(memoryDb);
