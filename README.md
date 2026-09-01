@@ -29,6 +29,8 @@ Normal indexing and retrieval make no external LLM request. The default embeddin
 
 ## Quick start
 
+Yeni bir repository eklemek veya mevcut repository'yi yeni commit'e taşımak için baştan sona operasyon sırası [Project lifecycle guide](docs/PROJECT_GUIDE.md) içinde yer alır.
+
 ```bash
 pnpm install
 cp .env.example .env
@@ -125,7 +127,7 @@ pnpm memory reconcile-all
 pnpm memory rollout-status
 ```
 
-See [Operations](docs/OPERATIONS.md) before onboarding a larger fleet or enabling managed checkouts.
+Günlük kısa komutların ötesindeki yeni proje ve proje güncelleme akışları için [Project lifecycle guide](docs/PROJECT_GUIDE.md), daha büyük rollout ve managed checkout işletimi için [Operations](docs/OPERATIONS.md) dokümanını kullanın.
 
 ## What is indexed
 
@@ -180,12 +182,20 @@ pnpm test
 pnpm build
 pnpm memory evaluate
 pnpm memory context-eval
+pnpm eval:fleet:validate
+pnpm eval:fleet
 pnpm memory security-audit
 ```
 
-`evaluate` measures retrieval Recall@K. `context-eval` executes task-level MCP plans and measures required-evidence recall and context savings against source reads. Add real engineering questions as the fleet grows; do not expand extraction or change embeddings without a measured miss.
+`evaluate` measures retrieval Recall@K. `context-eval` executes one repository's task-level MCP plans. `eval:fleet` validates architecture-family coverage and evaluates every registered repository suite as one gate. Add real engineering questions as the fleet grows; do not expand extraction or change embeddings without a measured miss.
 
-The current implementation passes 156 tests. The latest two-repository validation produced 0.9231 mean evidence recall, 15/15 clean cases, 100% active vector/evidence/commit coverage, and an open rollout gate.
+Two enforced architecture families are checked in: `content-site` and `product-app`. Their representatives carry 10–15 full cases; future repositories in the same family carry a curated 5–7 case overlay. Generate the starting draft after indexing:
+
+```bash
+pnpm memory eval-scaffold company.web.next --family=product-app
+```
+
+The fleet manifest rejects drafts, placeholder strict facts, missing job categories, unregistered assignments, uncovered registered repositories, stale target SHAs, dirty trees, strict misses, and quality below the configured recall/context thresholds.
 
 The evaluation contract and 50-question golden catalog live in [Evaluation](docs/EVALUATION.md).
 
@@ -213,6 +223,7 @@ The current scope intentionally excludes:
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Project lifecycle guide](docs/PROJECT_GUIDE.md)
 - [Agent integrations](docs/INTEGRATIONS.md)
 - [Operations](docs/OPERATIONS.md)
 - [Evaluation](docs/EVALUATION.md)

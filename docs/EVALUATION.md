@@ -1,8 +1,8 @@
 # Evaluation contract
 
-This contract defines the task-level acceptance suite for retrieval correctness, evidence quality, abstention, and context economy. The checked-in catalog is a reference pilot; each new repository shape should contribute real questions and evidence expectations to `config/context-engine-eval.json`.
+This contract defines the task-level acceptance suite for retrieval correctness, evidence quality, abstention, and context economy. The checked-in representative suites cover the two known architecture families; each materially different repository shape must contribute a representative suite, while similar repositories contribute a smaller repository-specific overlay through `config/evaluation-fleet.json`.
 
-The second checked-in project suite is `config/context-engine-eval.revolt.json`. It covers product-language route aliases, data flows, auth flow, impact, and repository verification. Run every applicable repository suite before expanding a rollout wave; a single pilot repository is not sufficient evidence for fleet quality.
+The current representatives are `config/context-engine-eval.json` for the content-site family and `config/context-engine-eval.revolt.json` for the product-app family. Together they cover product-language route aliases, data flows, auth and form flows, impact, implementation, debugging, verification, and abstention. Run the aggregate fleet gate before expanding a rollout wave; a single pilot repository is not sufficient evidence for fleet quality.
 
 ## 1. Amaç
 
@@ -25,7 +25,7 @@ Her vaka şu alanlara sahip olmalıdır:
 | Alan | Anlamı |
 | --- | --- |
 | Case ID | Değişmeyen kimlik |
-| Job | `lookup`, `flow`, `impact`, `implementation`, `debug`, `change`, `negative` |
+| Job | `lookup`, `flow`, `impact`, `implementation`, `debug`, `verify`, `cross-repository`, `change`, `negative` |
 | Question | Agent'a aynen verilecek soru |
 | Expected evidence | Cevabı doğrulayabilecek minimum source seti |
 | Expected policy | Memory yeterli olmalı, targeted source açılmalı veya agent abstain etmeli |
@@ -72,6 +72,80 @@ Kurallar:
 - Baseline'a göre median context input azalması `>= %40`.
 - Baseline'a göre median source-file read azalması `>= %50`.
 - Context tasarrufu uğruna task correctness düşmemeli.
+
+## Fleet architecture-family policy
+
+Sixteen similar repositories do not need sixteen unrelated 15-case catalogs. They are governed as two layers:
+
+- An architecture-family representative carries 10–15 full cases.
+- Every additional repository in that family carries a 5–7 case repository-specific overlay.
+
+The checked-in families are:
+
+| Family | Representative | Shape |
+| --- | --- | --- |
+| `content-site` | `hangikredi.aboutus.fe.next` | Content-led App Router, static/ISR pages, forms, small gateway surface |
+| `product-app` | `hangikredi.revolt.fe.next` | Product-led App Router, React Query, auth, dynamic forms, broad route surface |
+
+A new family is justified only by a material architecture difference such as Pages/Hybrid Router, Server Actions as the primary mutation boundary, a different auth/session model, or another state/data-fetching topology. Product names alone do not create a new family.
+
+Representative suites must cover all seven jobs:
+
+| Job | Minimum proof |
+| --- | --- |
+| `lookup` | Exact route/file/config identity |
+| `flow` | Ordered UI/page → service/handler → backend evidence |
+| `impact` | Reverse dependency and affected route/component surface |
+| `implementation` | Repository-native exemplar and minimum edit surface |
+| `debug` | One exact guard/catch/failure condition |
+| `verify` | Package scripts, tests and explicit validation gaps |
+| `negative` | Correct abstention when approved provenance/evidence is absent |
+
+Every overlay must include at least `lookup`, `flow`, `impact`, `verify`, and `negative`. It may add implementation/debug or cross-repository cases up to seven total. A repository with a route handler should normally use the seventh slot for a real handler failure condition.
+
+Generate an overlay draft only after the repository has been indexed:
+
+```bash
+pnpm memory eval-scaffold company.web.next --family=product-app
+```
+
+The scaffold deliberately contains `TODO` strict facts. It uses route inventory and behavior files to provide a bounded starting point, but generated assertions are not accepted as truth. Before admission:
+
+1. Replace every `TODO` with a claim verified from source.
+2. Confirm the minimum expected evidence; broad import closures are not focused evidence.
+3. Add forbidden claims that catch the most plausible wrong interpretation.
+4. Prefer questions copied from recent PRs, production incidents, onboarding, or actual developer prompts.
+5. Run the suite on a clean tree at its pinned target SHA.
+6. Set `draft:false` only after it passes without a primary miss.
+7. Add the suite to `config/evaluation-fleet.json`.
+
+Validate structure without running retrieval:
+
+```bash
+pnpm eval:fleet:validate
+```
+
+Run every suite and the aggregate gate:
+
+```bash
+pnpm eval:fleet
+```
+
+The gate fails when:
+
+- a registered repository has no family/suite assignment;
+- a family does not have exactly one representative;
+- representative or overlay case counts are outside policy;
+- mandatory jobs are missing;
+- a suite is still a draft or carries a placeholder strict fact;
+- target/indexed SHA or working-tree cleanliness is invalid;
+- any primary or strict miss occurs;
+- mean evidence recall is below `0.90`;
+- median context saving is below `40%`.
+
+Questions must model real engineering work. “List files containing React” is not a useful golden case. “If the token-refresh client changes, which auth handler and user flow are affected?” is. Exact lookup cases should normally be memory-sufficient; flow, impact, implementation, and debug cases may require targeted source; unsupported rationale or runtime claims must abstain.
+
+Feedback closes the loop. Export actionable reports with `pnpm memory feedback export <repository>`, curate them into the repository overlay, and keep the feedback entry open until the regression case exists. Embedding, graph, ranking, or extraction changes are justified only by a reproducible fleet miss.
 
 ## 6. Golden-question kataloğu
 

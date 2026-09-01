@@ -10,6 +10,7 @@ import { runAiExtraction } from "./sync/ai-extract.js";
 import { reconcileAll } from "./sync/reconcile.js";
 import { runRetrievalEvaluation } from "./retrieval/evaluate.js";
 import { runContextEvaluation } from "./retrieval/context-eval.js";
+import { runEvaluationFleet, scaffoldEvaluationOverlay } from "./retrieval/evaluation-fleet.js";
 import { runContextEconomy } from "./retrieval/context-economy.js";
 import { RetrievalTelemetry } from "./telemetry/retrieval-telemetry.js";
 import { AnswerFeedback, type BacklogState, type FeedbackSignal } from "./telemetry/answer-feedback.js";
@@ -23,7 +24,7 @@ import { readJson } from "./utils/fs.js";
 import type { DecisionInput } from "./memory/decisions.js";
 
 function help(): void {
-  console.log(`Frontend Engineering Memory\n\nCommands:\n  repos\n  status\n  full <repository>\n  full-all\n  sync <repository>\n  sync-all\n  reconcile <repository>\n  reconcile-all\n  vectors [repository]\n  embedding-status\n  ai-extract <repository> [--file=src/path.ts]\n  routes <repository>\n  dependencies <repository>\n  route-dependencies <repository> [--route=/path]\n  changes <repository> [--since=<commit>]\n  snapshots <repository>\n  behavior-diff <repository> --from=<sha> --to=<sha>\n  context-at <repository> --sha=<sha> <question>\n  decisions <repository> [query]\n  decision-add <repository> --file=<decision.json>\n  search <query> [--repo=<repository>] [--limit=10]\n  quality [repository]\n  evaluate [evaluation.json]\n  context-eval [evaluation.json]\n  context-economy [--run=<run.json>] [--policy=<AGENTS.md>]\n  telemetry [repository] [--recent=20] [--limit=200] [--prune]\n  freshness [repository]\n  security-audit [repository]\n  pilot-gate [--candidate=<repository>] [--run=<eval.json>] [--economy=<economy.json>]\n  rollout-status [--run=<eval.json>] [--economy=<economy.json>]\n  feedback add <repository> --signal=<sufficient|source-needed|wrong|stale> [--event=<id>] [--query=<text>] [--note=<text>] [--reporter=<who>]\n  feedback backlog [repository] [--state=<new|triaged|case-created|dismissed>] [--limit=50]\n  feedback export <repository> [--state=<new|triaged>] [--limit=50]\n  feedback triage <queryHash> --signal=<signal> --state=<state> [--case=<caseId>]\n  serve\n`);
+  console.log(`Frontend Engineering Memory\n\nCommands:\n  repos\n  status\n  full <repository>\n  full-all\n  sync <repository>\n  sync-all\n  reconcile <repository>\n  reconcile-all\n  vectors [repository]\n  embedding-status\n  ai-extract <repository> [--file=src/path.ts]\n  routes <repository>\n  dependencies <repository>\n  route-dependencies <repository> [--route=/path]\n  changes <repository> [--since=<commit>]\n  snapshots <repository>\n  behavior-diff <repository> --from=<sha> --to=<sha>\n  context-at <repository> --sha=<sha> <question>\n  decisions <repository> [query]\n  decision-add <repository> --file=<decision.json>\n  search <query> [--repo=<repository>] [--limit=10]\n  quality [repository]\n  evaluate [evaluation.json]\n  context-eval [evaluation.json]\n  context-eval-all [evaluation-fleet.json] [--validate-only]\n  eval-scaffold <repository> --family=<content-site|product-app>\n  context-economy [--run=<run.json>] [--policy=<AGENTS.md>]\n  telemetry [repository] [--recent=20] [--limit=200] [--prune]\n  freshness [repository]\n  security-audit [repository]\n  pilot-gate [--candidate=<repository>] [--run=<eval.json>] [--economy=<economy.json>]\n  rollout-status [--run=<eval.json>] [--economy=<economy.json>]\n  feedback add <repository> --signal=<sufficient|source-needed|wrong|stale> [--event=<id>] [--query=<text>] [--note=<text>] [--reporter=<who>]\n  feedback backlog [repository] [--state=<new|triaged|case-created|dismissed>] [--limit=50]\n  feedback export <repository> [--state=<new|triaged>] [--limit=50]\n  feedback triage <queryHash> --signal=<signal> --state=<state> [--case=<caseId>]\n  serve\n`);
 }
 
 async function main(): Promise<void> {
@@ -125,6 +126,15 @@ async function main(): Promise<void> {
     } else if (command === "context-eval") {
       const file=args[0] ?? path.join(projectRoot(),"config/context-engine-eval.json");
       console.log(JSON.stringify(await runContextEvaluation(memoryDb,file),null,2));
+    } else if (command === "context-eval-all") {
+      const file=args.find((item)=>!item.startsWith("--")) ?? path.join(projectRoot(),"config/evaluation-fleet.json");
+      const result=await runEvaluationFleet(memoryDb,file,{validateOnly:args.includes("--validate-only")});
+      console.log(JSON.stringify(result,null,2));
+      if (result.decision==="hold") process.exitCode=1;
+    } else if (command === "eval-scaffold") {
+      const name=args[0]; if (!name) throw new Error("repository name is required");
+      const family=args.find((item)=>item.startsWith("--family="))?.slice(9); if (!family) throw new Error("eval-scaffold requires --family=<family>");
+      console.log(JSON.stringify(scaffoldEvaluationOverlay(memoryDb,name,family),null,2));
     } else if (command === "telemetry") {
       const telemetry=new RetrievalTelemetry(memoryDb);
       const name=args.find((x)=>!x.startsWith("--"));

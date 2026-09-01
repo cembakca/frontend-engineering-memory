@@ -27,7 +27,7 @@ interface PlanStep { tool:ToolName; args?:{route?:string;type?:string;limit?:num
 
 interface ContextEvalCase {
   id:string;
-  job:"lookup"|"flow"|"impact"|"implementation"|"debug"|"negative";
+  job:"lookup"|"flow"|"impact"|"implementation"|"debug"|"verify"|"cross-repository"|"negative";
   strict:boolean;
   question:string;
   strictFact:string;

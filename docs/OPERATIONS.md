@@ -2,6 +2,8 @@
 
 The service keeps multiple Next.js repositories in one database while preserving repository identity in every structured row, memory, vector, graph edge, and retrieval result.
 
+Yeni repository ekleme ve mevcut repository'yi yeni commit'e taşıma işlemlerinin copy/paste edilebilir sırası için [Project lifecycle guide](PROJECT_GUIDE.md) dokümanını kullanın. Bu sayfa servis modu, rollout, CI, backup ve troubleshooting ayrıntılarına odaklanır.
+
 ## Repository modes
 
 Use `managedCheckout:false` for a developer working tree:
@@ -55,12 +57,15 @@ Grow through the configured `2 → 4 → 8 → 16` waves. At every wave:
 
 1. Add repository entries to the local `config/repositories.json`.
 2. Add repository-specific `queryAliases` only for established product/source vocabulary mismatches.
-3. Add representative real questions to `config/context-engine-eval.json`.
-4. Run `full` for a new architecture shape, then `full-all`.
-5. Check embeddings, security, freshness, and repository quality.
-6. Run the context evaluation and economy report.
-7. Pass their files to `pilot-gate`/`rollout-status` when they are not at the default local paths.
-8. Do not expand while the decision is `hold` or evidence is insufficient.
+3. Assign the repository to `content-site` or `product-app` in `config/evaluation-fleet.json`.
+4. After indexing, generate its overlay with `pnpm memory eval-scaffold <repository> --family=<family>`.
+5. Replace every generated `TODO` with a source-verified strict fact, confirm evidence/forbidden claims, save the 5–7 cases as a repository suite, and set `draft:false`.
+6. Run `pnpm eval:fleet:validate`; an uncovered registry entry or shallow suite is a hard failure.
+7. Run `full` for a new architecture shape, then `full-all`.
+8. Check embeddings, security, freshness, and repository quality.
+9. Run `pnpm eval:fleet` and the economy report.
+10. Pass their files to `pilot-gate`/`rollout-status` when they are not at the default local paths.
+11. Do not expand while either fleet or rollout decision is `hold`.
 
 Health floors are defined in `config/rollout-gates.json`; they currently require:
 

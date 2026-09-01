@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "policy": {
+    "representativeCases": {"min": 10, "max": 15},
+    "overlayCases": {"min": 5, "max": 7},
+    "requiredRepresentativeJobs": ["lookup", "flow", "impact", "implementation", "debug", "verify", "negative"],
+    "requiredOverlayJobs": ["lookup", "flow", "impact", "verify", "negative"],
+    "thresholds": {
+      "meanEvidenceRecall": 0.9,
+      "medianContextSavingPercent": 40,
+      "primaryMisses": 0,
+      "strictMisses": 0
+    }
+  },
+  "families": [
+    {
+      "id": "content-site",
+      "description": "Content-led App Router projects with static/ISR pages, forms and a small gateway surface.",
+      "representativeRepository": "hangikredi.aboutus.fe.next"
+    },
+    {
+      "id": "product-app",
+      "description": "Product-led App Router projects with React Query, auth, dynamic forms and a broad route surface.",
+      "representativeRepository": "hangikredi.revolt.fe.next"
+    }
+  ],
+  "repositories": [
+    {
+      "repository": "hangikredi.aboutus.fe.next",
+      "family": "content-site",
+      "role": "representative",
+      "suite": "context-engine-eval.json"
+    },
+    {
+      "repository": "hangikredi.revolt.fe.next",
+      "family": "product-app",
+      "role": "representative",
+      "suite": "context-engine-eval.revolt.json"
+    }
+  ]
+}

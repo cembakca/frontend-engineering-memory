@@ -136,7 +136,7 @@
     },
     {
       "id": "RCE-D07",
-      "job": "debug",
+      "job": "verify",
       "strict": true,
       "question": "Projenin error-handling ve automated-test stratejisi nedir?",
       "strictFact": "no automated test framework, no test script, no error.tsx boundary; only lint/build scripts exist",

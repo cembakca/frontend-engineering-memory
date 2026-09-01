@@ -141,7 +141,7 @@
     },
     {
       "id": "RVT-V01",
-      "job": "debug",
+      "job": "verify",
       "strict": true,
       "question": "Projenin automated-test ve doğrulama stratejisi nedir?",
       "strictFact": "package.json has build and lint scripts but no automated test runner script",
@@ -149,6 +149,49 @@
       "policy": "report-gap",
       "expectedEvidence": ["package.json"],
       "baselineReadSet": ["package.json"],
+      "plan": [{"tool": "memory_context", "args": {}}]
+    },
+    {
+      "id": "RVT-P01",
+      "job": "implementation",
+      "strict": false,
+      "question": "Faizsiz fırsatlardaki getInterestOppList ve React Query hydration pattern'ini izleyerek yeni ürün listeleme sayfası nasıl eklenmeli?",
+      "strictFact": "Server page fetchQuery/getInterestOppList/dehydrate -> Hydrate -> page.client.tsx",
+      "forbiddenClaims": ["fetch the initial list only in useEffect"],
+      "policy": "targeted-source",
+      "expectedEvidence": [
+        "src/app/interest-free-deals/page.tsx",
+        "src/utils/api/services/interest-free-deals/list.ts"
+      ],
+      "baselineReadSet": [
+        "src/app/interest-free-deals/page.tsx",
+        "src/utils/api/services/interest-free-deals/list.ts",
+        "src/app/interest-free-deals/page.client.tsx"
+      ],
+      "plan": [{"tool": "memory_context", "args": {}}]
+    },
+    {
+      "id": "RVT-D01",
+      "job": "debug",
+      "strict": true,
+      "question": "Client token refresh neden `No refresh token` döndürüp request atmadan çıkabilir?",
+      "strictFact": "Neither token state nor middleware Set-Cookie contains a real refresh token",
+      "forbiddenClaims": ["OAuth endpoint returned invalid_grant"],
+      "policy": "targeted-source",
+      "expectedEvidence": ["src/utils/libs/auth/token-refresh/client.ts"],
+      "baselineReadSet": ["src/utils/libs/auth/token-refresh/client.ts"],
+      "plan": [{"tool": "memory_context", "args": {}}]
+    },
+    {
+      "id": "RVT-N01",
+      "job": "negative",
+      "strict": true,
+      "question": "Ekip neden Next.js 15'i seçti?",
+      "strictFact": "No human-approved decision record supports the rationale",
+      "forbiddenClaims": ["performance reasons", "team preference", "migration requirement"],
+      "policy": "abstain",
+      "expectedEvidence": [],
+      "baselineReadSet": [],
       "plan": [{"tool": "memory_context", "args": {}}]
     }
   ]
