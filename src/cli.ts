@@ -8,7 +8,6 @@ import { startServer } from "./server.js";
 import { fullIndex, incrementalSync } from "./sync/sync.js";
 import { runAiExtraction } from "./sync/ai-extract.js";
 import { reconcileAll } from "./sync/reconcile.js";
-import { runRetrievalEvaluation } from "./retrieval/evaluate.js";
 import { runContextEvaluation } from "./retrieval/context-eval.js";
 import { runEvaluationFleet, scaffoldEvaluationOverlay } from "./retrieval/evaluation-fleet.js";
 import { runContextEconomy } from "./retrieval/context-economy.js";
@@ -22,9 +21,29 @@ import { TemporalContextEngine } from "./retrieval/temporal.js";
 import { TaskContextCompiler } from "./retrieval/task-context.js";
 import { readJson } from "./utils/fs.js";
 import type { DecisionInput } from "./memory/decisions.js";
+import { onboardRepository } from "./onboarding/onboard.js";
 
 function help(): void {
-  console.log(`Frontend Engineering Memory\n\nCommands:\n  repos\n  status\n  full <repository>\n  full-all\n  sync <repository>\n  sync-all\n  reconcile <repository>\n  reconcile-all\n  vectors [repository]\n  embedding-status\n  ai-extract <repository> [--file=src/path.ts]\n  routes <repository>\n  dependencies <repository>\n  route-dependencies <repository> [--route=/path]\n  changes <repository> [--since=<commit>]\n  snapshots <repository>\n  behavior-diff <repository> --from=<sha> --to=<sha>\n  context-at <repository> --sha=<sha> <question>\n  decisions <repository> [query]\n  decision-add <repository> --file=<decision.json>\n  search <query> [--repo=<repository>] [--limit=10]\n  quality [repository]\n  evaluate [evaluation.json]\n  context-eval [evaluation.json]\n  context-eval-all [evaluation-fleet.json] [--validate-only]\n  eval-scaffold <repository> --family=<content-site|product-app>\n  context-economy [--run=<run.json>] [--policy=<AGENTS.md>]\n  telemetry [repository] [--recent=20] [--limit=200] [--prune]\n  freshness [repository]\n  security-audit [repository]\n  pilot-gate [--candidate=<repository>] [--run=<eval.json>] [--economy=<economy.json>]\n  rollout-status [--run=<eval.json>] [--economy=<economy.json>]\n  feedback add <repository> --signal=<sufficient|source-needed|wrong|stale> [--event=<id>] [--query=<text>] [--note=<text>] [--reporter=<who>]\n  feedback backlog [repository] [--state=<new|triaged|case-created|dismissed>] [--limit=50]\n  feedback export <repository> [--state=<new|triaged>] [--limit=50]\n  feedback triage <queryHash> --signal=<signal> --state=<state> [--case=<caseId>]\n  serve\n`);
+  console.log(`Frontend Engineering Memory
+
+Commands:
+  repos
+  onboard [repository|--all] [--evaluate]
+  status
+  full <repository> | full-all
+  sync <repository> | sync-all
+  reconcile <repository> | reconcile-all
+  routes <repository>
+  dependencies <repository>
+  search <query> [--repo=<repository>] [--limit=10]
+  quality [repository]
+  context-eval-all [evaluation-fleet.json] [--validate-only]
+  eval-scaffold <repository> --family=<content-site|product-app>
+  freshness [repository]
+  security-audit [repository]
+  serve
+
+Run a command with its required arguments; see docs/PROJECT_GUIDE.md for advanced commands.`);
 }
 
 async function main(): Promise<void> {
@@ -38,6 +57,20 @@ async function main(): Promise<void> {
     if (command === "repos") {
       const registry=await loadRegistry();
       console.table(registry.repositories.map((r)=>({name:r.name,path:r.path,branch:r.mainBranch ?? "main"})));
+    } else if (command === "onboard") {
+      const requested=args.find((item)=>!item.startsWith("--"));
+      const registry=await loadRegistry();
+      const fleet=await readJson<any>(path.join(projectRoot(),"config/evaluation-fleet.json"));
+      const assigned=new Set((fleet?.repositories ?? []).map((item:any)=>item.repository));
+      const names=requested ? [requested] : registry.repositories
+        .map((item)=>item.name).filter((name)=>args.includes("--all")||!store.getRepository(name)||!assigned.has(name));
+      const results=[];
+      for (const name of names) {
+        try { results.push({ok:true,...await onboardRepository(memoryDb,name,{evaluate:args.includes("--evaluate")})}); }
+        catch (error) { results.push({ok:false,repository:name,error:(error as Error).message}); }
+      }
+      console.log(JSON.stringify({processed:results.length,results},null,2));
+      if (results.some((item:any)=>!item.ok||item.fleet?.decision==="hold")) process.exitCode=1;
     } else if (command === "status") {
       console.table(store.listRepositories().map((r:any)=>({name:r.name,next:r.next_version,router:r.router_type,lastSha:r.last_indexed_sha,indexedAt:r.last_indexed_at})));
     } else if (command === "full" || command === "sync" || command === "reconcile") {
@@ -120,9 +153,6 @@ async function main(): Promise<void> {
       },null,2));
     } else if (command === "vectors") {
       console.log(JSON.stringify(await rebuildVectors(memoryDb,args[0]),null,2));
-    } else if (command === "evaluate") {
-      const file=args[0] ?? path.join(projectRoot(),"config/retrieval-evaluation.json");
-      console.log(JSON.stringify(await runRetrievalEvaluation(memoryDb,file),null,2));
     } else if (command === "context-eval") {
       const file=args[0] ?? path.join(projectRoot(),"config/context-engine-eval.json");
       console.log(JSON.stringify(await runContextEvaluation(memoryDb,file),null,2));

@@ -46,10 +46,7 @@ Configure one or more repositories:
       "name": "company.web.next",
       "path": "/absolute/path/to/company.web.next",
       "mainBranch": "main",
-      "managedCheckout": false,
-      "queryAliases": {
-        "kullanıcının söylediği ürün terimi": ["SourceSymbol", "api-term"]
-      }
+      "managedCheckout": false
     }
   ]
 }
@@ -57,16 +54,15 @@ Configure one or more repositories:
 
 Developer working trees should use `managedCheckout:false`. A service-owned clean clone may use `managedCheckout:true` with a configured remote. Dirty working trees are refused; the indexer never resets a developer checkout.
 
-`queryAliases` is optional. Each key and its values form a symmetric vocabulary group, allowing Turkish/product terminology to find differently named source symbols without changing the embedding model. Keep groups repository-specific and evidence-oriented; they are applied only when the query mentions a term in that group.
+Route slugs, data-source names, client boundaries and backend identifiers are converted into repository vocabulary automatically during indexing. `queryAliases` remains an optional override for exceptional terminology; normal onboarding does not require it.
 
-Create the first index and verify it:
+Create the first index, generated evaluation overlay and fleet assignment with one command:
 
 ```bash
-pnpm memory full company.web.next
-pnpm memory embedding-status
-pnpm memory quality company.web.next
-pnpm memory security-audit company.web.next
+pnpm onboard
 ```
+
+The command discovers incomplete registry entries. Add `--evaluate` to run the complete retrieval fleet after structural validation, or pass a repository name to force one target.
 
 The default database is created at `data/engineering-memory.sqlite`. The first vector operation downloads the pinned local `multilingual-e5-small-v1` profile.
 
@@ -180,19 +176,18 @@ Only approved ADR, PR, issue, or human provenance may answer “why was this cho
 pnpm typecheck
 pnpm test
 pnpm build
-pnpm memory evaluate
 pnpm memory context-eval
 pnpm eval:fleet:validate
 pnpm eval:fleet
 pnpm memory security-audit
 ```
 
-`evaluate` measures retrieval Recall@K. `context-eval` executes one repository's task-level MCP plans. `eval:fleet` validates architecture-family coverage and evaluates every registered repository suite as one gate. Add real engineering questions as the fleet grows; do not expand extraction or change embeddings without a measured miss.
+`context-eval` executes one repository's task-level MCP plans. `eval:fleet` validates architecture-family coverage and evaluates every registered repository suite as one gate. Add real engineering questions as curated regressions; do not expand extraction or change embeddings without a measured miss.
 
-Two enforced architecture families are checked in: `content-site` and `product-app`. Their representatives carry 10–15 full cases; future repositories in the same family carry a curated 5–7 case overlay. Generate the starting draft after indexing:
+Two enforced architecture families are checked in: `content-site` and `product-app`. Their representatives carry 10–15 curated cases; future repositories receive a source-derived 5–7 case smoke overlay during onboarding:
 
 ```bash
-pnpm memory eval-scaffold company.web.next --family=product-app
+pnpm onboard company.web.next --evaluate
 ```
 
 The fleet manifest rejects drafts, placeholder strict facts, missing job categories, unregistered assignments, uncovered registered repositories, stale target SHAs, dirty trees, strict misses, and quality below the configured recall/context thresholds.
@@ -228,6 +223,7 @@ The current scope intentionally excludes:
 - [Operations](docs/OPERATIONS.md)
 - [Evaluation](docs/EVALUATION.md)
 - [Embedding model](docs/EMBEDDINGS.md)
+- [Feature analysis & delivery roadmap](docs/FEATURE_ANALYSIS_ROADMAP.md)
 
 ## Development status
 

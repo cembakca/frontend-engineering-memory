@@ -8,13 +8,13 @@ Komutlar `frontend-engineering-memory` dizininden çalıştırılmalıdır. Örn
 
 | Dosya | Amaç | Git durumu |
 | --- | --- | --- |
-| `config/repositories.json` | Bu makinede indexlenecek repository adlarını, mutlak yollarını ve alias'larını tutar | Yerel; `.gitignore` içinde |
+| `config/repositories.json` | Bu makinede indexlenecek repository adlarını, yollarını ve checkout politikasını tutar | Yerel; `.gitignore` içinde |
 | `config/evaluation-fleet.json` | Her repository'nin mimari ailesini, rolünü ve evaluation suite'ini tanımlar | Ortak; commitlenir |
 | `config/context-engine-eval.*.json` | Repository'ye ait gerçek geliştirici sorularını ve beklenen source kanıtlarını tutar | Ortak; commitlenir |
 | `data/engineering-memory.sqlite` | Üretilmiş memory, graph, vector, snapshot ve telemetry verisi | Yerel; `.gitignore` içinde |
 | Hedef projenin `AGENTS.md`/`CLAUDE.md` dosyası | Agent'a memory-first kullanım politikasını verir | Hedef projenin kendi politikasına göre commitlenir |
 
-Önemli sonuç: `repositories.json` içine proje eklemek tek başına onboarding'i tamamlamaz. Fleet manifesti ve curated evaluation suite de eklenmelidir.
+`repositories.json` elle düzenlenen tek onboarding kaynağıdır. Fleet ataması, mimari aile, code-side query vocabulary ve repository overlay'i `pnpm onboard` tarafından türetilir.
 
 ## 2. İki temel kural
 
@@ -48,7 +48,7 @@ git -C /absolute/path/to/company.web.next status --short
 git -C /absolute/path/to/company.web.next rev-parse HEAD
 ```
 
-### Adım 2 — Mimari aileyi seçin
+### Adım 2 — Otomatik aile sınıflandırmasını bilin
 
 Mevcut benzer Next.js projeleri için iki aile vardır:
 
@@ -57,7 +57,7 @@ Mevcut benzer Next.js projeleri için iki aile vardır:
 | `content-site` | İçerik ağırlıklı App Router, statik/ISR sayfalar, formlar ve küçük gateway yüzeyi |
 | `product-app` | Ürün akışları, auth/session, React Query veya benzeri data katmanı, dinamik formlar ve geniş route yüzeyi |
 
-Ürün adı farklı olduğu için yeni aile açılmaz. Pages/Hybrid Router, esas mutation sınırı olarak Server Actions, farklı auth/session modeli veya belirgin biçimde farklı state/data-fetching topolojisi varsa yeni bir aile değerlendirilir. Yeni aile, 5–7 soruluk overlay yerine 10–15 soruluk representative suite gerektirir.
+`pnpm onboard` paket, route handler, auth ve data-backed route sinyallerinden bu seçimi otomatik yapar; registry'ye aile yazılmaz. Çıktıdaki `classification.signals` yalnız gözden geçirilir. Pages/Hybrid Router veya belirgin biçimde yeni bir mimari topoloji varsa yeni aile tasarımı ayrı bir engine değişikliğidir; normal proje onboarding'i değildir.
 
 ### Adım 3 — Yerel registry'ye ekleyin
 
@@ -68,15 +68,12 @@ Mevcut benzer Next.js projeleri için iki aile vardır:
   "name": "company.web.next",
   "path": "/absolute/path/to/company.web.next",
   "mainBranch": "main",
-  "managedCheckout": false,
-  "queryAliases": {
-    "ekibin kullandığı ürün terimi": ["SourceSymbol", "backend-term"]
-  }
+  "managedCheckout": false
 }
 ```
 
 - Geliştirici checkout'u için `managedCheckout:false` kullanın.
-- `queryAliases` zorunlu değildir. Yalnız ürün dilindeki terim ile source adı gerçekten farklıysa ekleyin.
+- `queryAliases` normal onboarding'in parçası değildir. Route, data source, backend ve client-boundary sözlüğü index sırasında otomatik oluşur. Yalnız istisnai bir ürün terimi için override olarak kullanılabilir.
 - Secret, token, kullanıcı verisi veya environment value eklemeyin.
 - Repository adı bütün komutlarda ve fleet manifestinde birebir aynı yazılmalıdır.
 
@@ -86,15 +83,30 @@ Registry'nin okunduğunu doğrulayın:
 pnpm memory repos
 ```
 
-Bu aşamada `pnpm eval:fleet:validate`, yeni repository henüz manifeste atanmadığı için bilinçli olarak hata verebilir.
-
-### Adım 4 — İlk full index'i oluşturun
+### Adım 4 — Tek komutla onboard edin
 
 ```bash
-pnpm memory full company.web.next
+pnpm onboard
 ```
 
-Başarılı sonuçta `type: "FULL"`, doğru repository adı, beklenen SHA, route sayısı ve oluşturulan memory sayıları görünmelidir.
+Komut idempotent olarak şu işleri yapar:
+
+1. Clean Git snapshot'ını full indexler.
+2. Route slug, data source, backend ve client-boundary adlarından query vocabulary üretir.
+3. Paket, auth, handler ve data-route sinyallerinden `content-site` veya `product-app` ailesini seçer.
+4. Kaynaktan doğrulanabilir 5–7 vakalık generated smoke overlay üretir.
+5. Fleet manifestine `overlay` kaydını ekler veya daha önce ürettiği kaydı günceller.
+6. Fleet yapısını doğrular.
+
+Mevcut elle curate edilmiş representative veya overlay suite'leri ezilmez. Otomatik dosyalar `context-engine-eval.auto.<repository>.json` biçiminde adlandırılır. Tam retrieval gate'ini aynı çalıştırmada yürütmek için:
+
+```bash
+pnpm onboard company.web.next --evaluate
+```
+
+Başarılı sonuçta `index`, `classification`, `suiteMode` ve `fleet` alanları görünür. Yapısal doğrulama başarısızsa komut exit code `1` döndürür.
+
+### Adım 5 — Sonuçları kontrol edin
 
 Ardından temel kontrolleri çalıştırın:
 
@@ -115,82 +127,9 @@ pnpm memory search "kullanıcı bu akışa hangi sayfadan giriyor?" --repo=compa
 pnpm memory search "bu route hangi servis ve config değerlerini kullanıyor?" --repo=company.web.next
 ```
 
-Route listesi veya repository profili bariz biçimde eksikse evaluation hazırlamaya geçmeden analyzer/index sorununu çözün.
+Route listesi veya repository profili bariz biçimde eksikse sorun artık onboarding metadata'sı değil, analyzer/index katmanındadır. Generated overlay yapısal ve retrieval smoke coverage sağlar; gerçek incident/PR beklentilerini temsil eden curated representative suite'ler aile seviyesinde kalite çıpası olmaya devam eder.
 
-### Adım 5 — Repository overlay taslağını üretin
-
-Benzer iki aileden birine giren yeni repository için:
-
-```bash
-pnpm memory eval-scaffold company.web.next --family=product-app > config/context-engine-eval.company-web.json
-```
-
-Hedef suite dosya adının daha önce kullanılmadığını kontrol edin; shell'deki `>` mevcut aynı adlı dosyayı ezer. Üretilen dosya bilinçli olarak `draft:true` ve `TODO` strict fact'lerle gelir. Bu dosya doğrudan kabul edilemez.
-
-### Adım 6 — Soruları source üzerinden curate edin
-
-Her vaka için:
-
-1. Soruyu, geliştiricinin gerçekten soracağı repository-specific bir soruya dönüştürün.
-2. `strictFact` içindeki `TODO` değerini source'tan doğrulanmış kısa gerçekle değiştirin.
-3. `expectedEvidence` listesini cevabı kanıtlayan minimum dosya setiyle sınırlandırın.
-4. En olası yanlış yorumu `forbiddenClaims` içine ekleyin.
-5. Route, sembol veya dosya yeniden adlandırılmışsa soru ve plan argümanlarını gerçek adlarla düzeltin.
-6. Suite'in `targetSha` değerinin `git rev-parse HEAD` ile aynı olduğunu doğrulayın.
-7. Bütün vakalar kaynak üzerinden kontrol edildikten sonra `draft:false` yapın.
-
-Overlay 5–7 vaka içermeli ve en az şu işleri kapsamalıdır:
-
-- `lookup`
-- `flow`
-- `impact`
-- `verify`
-- `negative`
-
-Mümkünse `implementation` ekleyin. Repository'de route handler varsa yedinci vaka olarak gerçek bir `debug` koşulu tercih edin.
-
-### Adım 7 — Fleet manifestine ekleyin
-
-`config/evaluation-fleet.json` içindeki `repositories` listesine kayıt ekleyin. Suite yolu manifestin bulunduğu `config/` dizinine göre relative yazılır:
-
-```json
-{
-  "repository": "company.web.next",
-  "family": "product-app",
-  "role": "overlay",
-  "suite": "context-engine-eval.company-web.json"
-}
-```
-
-Her ailede yalnız bir `representative` olabilir. Aynı aileye eklenen diğer projeler `overlay` olmalıdır.
-
-### Adım 8 — Yapısal doğrulama ve retrieval gate
-
-Önce hızlı yapısal kontrolü çalıştırın:
-
-```bash
-pnpm eval:fleet:validate
-```
-
-Bu kontrol şunları reddeder:
-
-- registry'de olup manifestte olmayan repository;
-- yanlış aile veya birden fazla representative;
-- 5–7 aralığı dışında overlay;
-- eksik zorunlu job;
-- `draft:true`;
-- `TODO` strict fact;
-- eksik evidence/plan veya tekrarlanan vaka kimliği.
-
-Ardından bütün repository suite'lerini gerçek retrieval üzerinden çalıştırın:
-
-```bash
-pnpm eval:fleet
-```
-
-Beklenen sonuç `decision: "pass"` olmalıdır. `hold` sonucunda rapordaki check ve miss sınıfını çözmeden onboarding tamamlanmış sayılmaz.
-
-### Adım 9 — Agent bağlantısını doğrulayın
+### Adım 6 — Agent bağlantısını doğrulayın
 
 Engine source kodu değişmediyse yalnız yeni veri indexlendiği için build almak gerekmez. Uzun süredir açık bir MCP client eski tool schema kullanıyorsa veya engine kodu değiştiyse:
 
@@ -206,11 +145,11 @@ Sonra Codex, Claude veya Cursor MCP sürecini yeniden başlatın. Agent ile üç
 
 Cevap repository adını, indexed SHA'yı ve source evidence'ı taşımalıdır. Memory yetersizse agent yalnız `sourceFallback` dosyalarını açmalıdır.
 
-### Adım 10 — Paylaşılan dosyaları commit edin
+### Adım 7 — Üretilen paylaşılan dosyaları commit edin
 
 Frontend Engineering Memory repository'sinde şunları commit edin:
 
-- yeni `config/context-engine-eval.*.json` suite'i;
+- yeni `config/context-engine-eval.auto.*.json` suite'i;
 - güncellenen `config/evaluation-fleet.json`;
 - gerekiyorsa ortak dokümantasyon veya alias örnekleri.
 
@@ -377,13 +316,11 @@ Embedding modeli, analyzer veya ranking yalnız tekrarlanabilir fleet miss'i var
 
 - [ ] Hedef repository doğru branch'te ve clean.
 - [ ] `config/repositories.json` kaydı doğru mutlak yolu kullanıyor.
-- [ ] `pnpm memory full` başarılı.
+- [ ] `pnpm onboard <repository> --evaluate` başarılı.
 - [ ] Route, dependency, quality, freshness, embedding ve security çıktıları kontrol edildi.
-- [ ] Doğru mimari aile seçildi.
-- [ ] 5–7 gerçek overlay sorusu source üzerinden curate edildi.
-- [ ] `draft:false`, `targetSha` doğru ve `TODO` kalmadı.
-- [ ] Fleet manifest kaydı eklendi.
-- [ ] `pnpm eval:fleet:validate` başarılı.
+- [ ] Otomatik aile sinyalleri gözden geçirildi.
+- [ ] Generated overlay `draft:false`, doğru `targetSha` ve 5–7 vaka taşıyor.
+- [ ] Fleet manifest kaydı otomatik eklendi.
 - [ ] `pnpm eval:fleet` sonucu `pass`.
 - [ ] Agent smoke soruları repository, SHA ve evidence ile cevaplandı.
 - [ ] Suite ve manifest commitlendi; yerel DB/registry commitlenmedi.
@@ -408,7 +345,7 @@ Hedef repository'de uncommitted değişiklik vardır. Engine bu değişikliği b
 
 ### `registered repository has no evaluation assignment`
 
-Proje yerel registry'ye eklenmiş fakat `config/evaluation-fleet.json` içine suite ataması yapılmamıştır. Onboarding sırasında geçici olarak beklenir; production gate öncesinde overlay'i curate edip manifest kaydını ekleyin.
+Proje yerel registry'ye eklenmiş fakat otomatik onboarding tamamlanmamıştır. `pnpm onboard <repository>` çalıştırın; suite ve fleet kaydı script tarafından üretilecektir.
 
 ### Fleet `target-sha` check'i başarısız
 

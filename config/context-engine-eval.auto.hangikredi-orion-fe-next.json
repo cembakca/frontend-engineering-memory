@@ -1,0 +1,173 @@
+{
+  "suite": "hangikredi.orion.fe.next product-app overlay",
+  "repository": "hangikredi.orion.fe.next",
+  "targetSha": "847e5692bd24bce0707373929b9af56a48e06e91",
+  "draft": false,
+  "family": "product-app",
+  "role": "overlay",
+  "generated": true,
+  "cases": [
+    {
+      "id": "HOFNFAF9-E01",
+      "job": "lookup",
+      "strict": true,
+      "question": "/calculationtools route'u hangi source dosyasından gelir ve rendering sinyali nedir?",
+      "strictFact": "/calculationtools -> src/app/(baselayout)/calculationtools/page.tsx; rendering=dynamic-ssr",
+      "forbiddenClaims": [],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/(baselayout)/calculationtools/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/(baselayout)/calculationtools/page.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "route": "/calculationtools"
+          }
+        }
+      ]
+    },
+    {
+      "id": "HOFNFAF9-F01",
+      "job": "flow",
+      "strict": false,
+      "question": "/calculationtools sayfasının ana veri veya kullanıcı akışı nedir?",
+      "strictFact": "/calculationtools uses url -> /api/next-api/orion/auth/refresh-token -> url -> /api/next-api/orion/auth/refresh-token",
+      "forbiddenClaims": [],
+      "policy": "targeted-source",
+      "expectedEvidence": [
+        "src/app/(baselayout)/calculationtools/page.tsx",
+        "src/app/layout.tsx",
+        "src/app/(baselayout)/layout.tsx",
+        "src/app/(baselayout)/calculationtools/page.client.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/(baselayout)/calculationtools/page.tsx",
+        "src/app/layout.tsx",
+        "src/app/(baselayout)/layout.tsx",
+        "src/app/(baselayout)/calculationtools/page.client.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "HOFNFAF9-I01",
+      "job": "impact",
+      "strict": false,
+      "question": "src/app/(baselayout)/calculationtools/page.tsx değişirse hangi route, component ve servisler etkilenir?",
+      "strictFact": "src/app/(baselayout)/calculationtools/page.tsx directly implements /calculationtools",
+      "forbiddenClaims": [
+        "all routes are affected"
+      ],
+      "policy": "targeted-source",
+      "expectedEvidence": [
+        "src/app/(baselayout)/calculationtools/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/(baselayout)/calculationtools/page.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "HOFNFAF9-P01",
+      "job": "implementation",
+      "strict": false,
+      "question": "/calculationtools benzeri yeni bir sayfa eklerken hangi repository pattern'i izlenmeli?",
+      "strictFact": "src/app/(baselayout)/calculationtools/page.tsx is the indexed repository-native route exemplar",
+      "forbiddenClaims": [],
+      "policy": "targeted-source",
+      "expectedEvidence": [
+        "src/app/(baselayout)/calculationtools/page.tsx",
+        "src/app/layout.tsx",
+        "src/app/(baselayout)/layout.tsx",
+        "src/app/(baselayout)/calculationtools/page.client.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/(baselayout)/calculationtools/page.tsx",
+        "src/app/layout.tsx",
+        "src/app/(baselayout)/layout.tsx",
+        "src/app/(baselayout)/calculationtools/page.client.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "HOFNFAF9-D01",
+      "job": "debug",
+      "strict": true,
+      "question": "/api/next-api/orion/auth/refresh-token handler'ı hangi doğrulanmış koşullarda hata döndürebilir?",
+      "strictFact": "/api/next-api/orion/auth/refresh-token is implemented by src/app/api/next-api/orion/auth/refresh-token/route.ts",
+      "forbiddenClaims": [],
+      "policy": "targeted-source",
+      "expectedEvidence": [
+        "src/app/api/next-api/orion/auth/refresh-token/route.ts"
+      ],
+      "baselineReadSet": [
+        "src/app/api/next-api/orion/auth/refresh-token/route.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "HOFNFAF9-V01",
+      "job": "verify",
+      "strict": true,
+      "question": "Bu repository'de değişiklikten sonra hangi test, lint, typecheck ve build doğrulamaları çalıştırılabilir?",
+      "strictFact": "package.json is the authoritative source for available verification scripts",
+      "forbiddenClaims": [],
+      "policy": "targeted-source",
+      "expectedEvidence": [
+        "package.json"
+      ],
+      "baselineReadSet": [
+        "package.json"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "HOFNFAF9-N01",
+      "job": "negative",
+      "strict": true,
+      "question": "Ekip bu Next.js mimarisini neden seçti?",
+      "strictFact": "No rationale is valid without a human-approved decision record",
+      "forbiddenClaims": [
+        "performance reasons",
+        "team preference"
+      ],
+      "policy": "abstain",
+      "expectedEvidence": [],
+      "baselineReadSet": [],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    }
+  ]
+}

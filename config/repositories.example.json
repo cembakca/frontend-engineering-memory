@@ -4,11 +4,7 @@
       "name": "hangikredi.example.fe.next",
       "path": "/absolute/path/to/hangikredi.example.fe.next",
       "mainBranch": "main",
-      "managedCheckout": false,
-      "queryAliases": {
-        "iletişim formu": ["ContactForm", "contact"],
-        "abonelik": ["NewsletterForm", "subscribe", "subscription"]
-      }
+      "managedCheckout": false
     },
     {
       "name": "memory-managed-project",

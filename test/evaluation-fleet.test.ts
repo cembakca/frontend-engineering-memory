@@ -10,14 +10,16 @@ import { configureTestNativeBinding } from "./native-binding.js";
 
 await configureTestNativeBinding();
 
-test("the checked-in fleet assigns both registered architecture representatives",async()=>{
+test("the checked-in fleet assigns both representatives and generated repository overlays",async()=>{
   const file=fileURLToPath(new URL("../config/evaluation-fleet.json",import.meta.url));
-  const result=await validateEvaluationFleet(file,{registryRepositories:["hangikredi.aboutus.fe.next","hangikredi.revolt.fe.next"]});
+  const result=await validateEvaluationFleet(file,{registryRepositories:["hangikredi.aboutus.fe.next","hangikredi.revolt.fe.next","hangikredi.orion.fe.next"]});
   assert.equal(result.validation.ok,true,result.validation.errors.join("\n"));
   assert.deepEqual(result.validation.suites.map((item)=>[item.role,item.cases]),
-    [["representative",15],["representative",13]]);
-  assert.ok(result.validation.suites.every((item)=>["lookup","flow","impact","implementation","debug","verify","negative"]
-    .every((job)=>item.jobs.includes(job))));
+    [["representative",15],["representative",13],["overlay",7]]);
+  assert.ok(result.validation.suites.filter((item)=>item.role==="representative")
+    .every((item)=>["lookup","flow","impact","implementation","debug","verify","negative"].every((job)=>item.jobs.includes(job))));
+  assert.ok(result.validation.suites.filter((item)=>item.role==="overlay")
+    .every((item)=>["lookup","flow","impact","verify","negative"].every((job)=>item.jobs.includes(job))));
 });
 
 test("fleet validation rejects shallow drafts and uncovered repositories",async()=>{
@@ -57,6 +59,11 @@ test("scaffolds a bounded overlay with every mandatory job and explicit human-re
     assert.deepEqual(draft.cases.map((item:any)=>item.job),["lookup","flow","impact","implementation","verify","negative"]);
     assert.ok(draft.cases.some((item:any)=>String(item.strictFact).includes("TODO")));
     assert.equal(draft.reviewRequired.length,3);
+    const generated=scaffoldEvaluationOverlay(memoryDb,"fixture","product-app",{generated:true});
+    assert.equal(generated.draft,false);
+    assert.equal(generated.generated,true);
+    assert.ok(generated.cases.every((item:any)=>!String(item.strictFact).includes("TODO")));
+    assert.equal(generated.reviewRequired,undefined);
   } finally {
     memoryDb.close();
     await rm(root,{recursive:true,force:true});

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { MemoryDatabase } from "../src/memory/database.js";
-import { matchingAliasRoute, matchingQueryAliases, normalizeQueryAliases } from "../src/retrieval/query-vocabulary.js";
+import { deriveQueryAliases, matchingAliasRoute, matchingQueryAliases, normalizeQueryAliases } from "../src/retrieval/query-vocabulary.js";
 import { hybridSearch } from "../src/retrieval/search.js";
 import { configureTestNativeBinding } from "./native-binding.js";
 
@@ -28,6 +28,17 @@ test("maps a product alias to an indexed static route",()=>{
 test("rejects malformed repository vocabulary",()=>{
   assert.throws(()=>normalizeQueryAliases({contact:"not-an-array"}),/must be an array/);
   assert.throws(()=>normalizeQueryAliases({x:["contact"]}),/Invalid queryAliases key/);
+});
+
+test("derives route, service and component vocabulary while preserving explicit product terms",()=>{
+  const aliases=deriveQueryAliases([{
+    route:"/interest-free-deals",sourceFile:"src/app/interest-free-deals/page.tsx",
+    dataSources:["getInterestOppList"],backendDependencies:["zero-interest-opportunity-list"],clientBoundaries:["DealsClient"],
+  }],{"faizsiz fırsatlar":["kampanya"]});
+  assert.deepEqual(aliases["faizsiz fırsatlar"],["kampanya"]);
+  assert.ok(aliases["interest free deals"]?.includes("getInterestOppList"));
+  assert.ok(aliases["interest free deals"]?.includes("Deals Client"));
+  assert.ok(!aliases["interest free deals"]?.includes("src"));
 });
 
 test("hybrid FTS uses aliases stored with the repository",async()=>{

@@ -12,6 +12,7 @@ import { persistVectors, prepareVectors } from "../memory/vectorize.js";
 import type { MemoryCandidate, PreparedMemoryCandidate, RepositoryConfig, RouteRecord, SyncOptions } from "../types.js";
 import { classifyFile } from "./classifier.js";
 import { extractSymbolGraph } from "../analyzers/symbol-graph.js";
+import { deriveQueryAliases } from "../retrieval/query-vocabulary.js";
 
 const SOURCE_EXT=/\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 
@@ -33,6 +34,7 @@ function routeKey(route:Pick<RouteRecord,"route"|"sourceFile">):string { return 
 export async function fullIndex(config:RepositoryConfig,memoryDb:MemoryDatabase,options:SyncOptions={}):Promise<object> {
   const {head,profile,store,existing}=await baseline(config,memoryDb,options);
   const routes=await scanRoutes(config.path);
+  const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases)};
   const dependencies=await analyzeRepositoryDependencies(config.path);
   const sourceFiles=await listAnalyzableSourceFiles(config.path);
   const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
@@ -49,7 +51,7 @@ export async function fullIndex(config:RepositoryConfig,memoryDb:MemoryDatabase,
 
   let deactivated=0; let created=0;
   store.transaction(()=>{
-    const repositoryId=store.upsertRepository(config,profile);
+    const repositoryId=store.upsertRepository(indexedConfig,profile);
     store.replaceRepositoryPackageDependencies(repositoryId,profile.packageDependencies,head);
     const previous=store.getRepository(config.name) as {last_indexed_sha?:string|null};
     const runId=store.beginRun(repositoryId,"FULL",previous.last_indexed_sha ?? null,head);
@@ -76,10 +78,11 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   const repositoryId=existing.id;
   if (fromSha===head) {
     const routes=await scanRoutes(config.path);
+    const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases)};
     const sourceFiles=await listAnalyzableSourceFiles(config.path);
     const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
     store.transaction(()=>{
-      store.upsertRepository(config,profile);
+      store.upsertRepository(indexedConfig,profile);
       store.replaceRepositoryPackageDependencies(repositoryId,profile.packageDependencies,head);
       store.reconcileRoutes(repositoryId,routes,head);
       store.captureRepositorySnapshot(repositoryId,config.name,head,profile as any,graph);
@@ -95,6 +98,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   const classified=changes.map((change)=>({...change,classification:classifyFile(change.path)}));
   const relevant=classified.filter((change)=>change.classification.memoryRelevant);
   const routes=await scanRoutes(config.path);
+  const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases)};
   const snapshotFiles=await listAnalyzableSourceFiles(config.path);
   const graph=await extractSymbolGraph(config.path,snapshotFiles,routes.map((route)=>route.route));
   const changedPaths=new Set(changes.flatMap((change)=>change.previousPath ? [change.previousPath,change.path] : [change.path]));
@@ -124,7 +128,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
 
   let deactivated=0; let created=0;
   store.transaction(()=>{
-    store.upsertRepository(config,profile);
+    store.upsertRepository(indexedConfig,profile);
     store.replaceRepositoryPackageDependencies(repositoryId,profile.packageDependencies,head);
     const runId=store.beginRun(repositoryId,"INCREMENTAL",fromSha,head);
     store.reconcileRoutes(repositoryId,routes,head);

@@ -1,10 +1,30 @@
 {
   "version": 1,
   "policy": {
-    "representativeCases": {"min": 10, "max": 15},
-    "overlayCases": {"min": 5, "max": 7},
-    "requiredRepresentativeJobs": ["lookup", "flow", "impact", "implementation", "debug", "verify", "negative"],
-    "requiredOverlayJobs": ["lookup", "flow", "impact", "verify", "negative"],
+    "representativeCases": {
+      "min": 10,
+      "max": 15
+    },
+    "overlayCases": {
+      "min": 5,
+      "max": 7
+    },
+    "requiredRepresentativeJobs": [
+      "lookup",
+      "flow",
+      "impact",
+      "implementation",
+      "debug",
+      "verify",
+      "negative"
+    ],
+    "requiredOverlayJobs": [
+      "lookup",
+      "flow",
+      "impact",
+      "verify",
+      "negative"
+    ],
     "thresholds": {
       "meanEvidenceRecall": 0.9,
       "medianContextSavingPercent": 40,
@@ -36,6 +56,12 @@
       "family": "product-app",
       "role": "representative",
       "suite": "context-engine-eval.revolt.json"
+    },
+    {
+      "repository": "hangikredi.orion.fe.next",
+      "family": "product-app",
+      "role": "overlay",
+      "suite": "context-engine-eval.auto.hangikredi-orion-fe-next.json"
     }
   ]
 }

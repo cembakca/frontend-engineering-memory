@@ -33,19 +33,19 @@ Managed sync fetches the configured remote and refreshes only that dedicated che
 
 ## First index
 
-Start with one repository:
+After adding entries to `config/repositories.json`, onboard every incomplete repository:
 
 ```bash
-pnpm memory full company.web.next
+pnpm onboard --evaluate
 pnpm memory embedding-status
-pnpm memory quality company.web.next
-pnpm memory security-audit company.web.next
+pnpm memory quality
+pnpm memory security-audit
 ```
 
-Then index the configured fleet:
+To rebuild every configured repository explicitly:
 
 ```bash
-pnpm memory full-all
+pnpm onboard --all --evaluate
 pnpm memory rollout-status
 ```
 
@@ -56,16 +56,13 @@ Batch commands isolate failures per repository and return a non-zero exit code i
 Grow through the configured `2 → 4 → 8 → 16` waves. At every wave:
 
 1. Add repository entries to the local `config/repositories.json`.
-2. Add repository-specific `queryAliases` only for established product/source vocabulary mismatches.
-3. Assign the repository to `content-site` or `product-app` in `config/evaluation-fleet.json`.
-4. After indexing, generate its overlay with `pnpm memory eval-scaffold <repository> --family=<family>`.
-5. Replace every generated `TODO` with a source-verified strict fact, confirm evidence/forbidden claims, save the 5–7 cases as a repository suite, and set `draft:false`.
-6. Run `pnpm eval:fleet:validate`; an uncovered registry entry or shallow suite is a hard failure.
-7. Run `full` for a new architecture shape, then `full-all`.
-8. Check embeddings, security, freshness, and repository quality.
-9. Run `pnpm eval:fleet` and the economy report.
-10. Pass their files to `pilot-gate`/`rollout-status` when they are not at the default local paths.
-11. Do not expand while either fleet or rollout decision is `hold`.
+2. Run `pnpm onboard --evaluate`; incomplete registry entries are discovered and indexing, vocabulary, family inference, generated overlay, fleet assignment and validation run as one idempotent operation.
+3. Check embeddings, security, freshness and repository quality.
+4. Run the economy report.
+5. Pass run files to `pilot-gate`/`rollout-status` when they are not at the default local paths.
+6. Do not expand while either fleet or rollout decision is `hold`.
+
+`queryAliases`, family and suite files are not normal hand-authored onboarding inputs. Curated suites remain supported as long-lived regression assets and are preserved by `onboard`.
 
 Health floors are defined in `config/rollout-gates.json`; they currently require:
 

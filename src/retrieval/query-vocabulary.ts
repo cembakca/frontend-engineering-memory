@@ -1,5 +1,13 @@
 export type QueryAliases=Record<string,string[]>;
 
+interface VocabularyRoute {
+  route:string;
+  sourceFile:string;
+  dataSources?:string[];
+  backendDependencies?:string[];
+  clientBoundaries?:string[];
+}
+
 const MAX_GROUPS=100;
 const MAX_ALIASES_PER_GROUP=20;
 const MAX_TERM_LENGTH=80;
@@ -28,6 +36,32 @@ export function normalizeQueryAliases(value:unknown):QueryAliases {
     normalized[canonical.trim()]=[...new Set(aliases.slice(0,MAX_ALIASES_PER_GROUP).map((item)=>item.trim()))];
   }
   return normalized;
+}
+
+function readable(value:string):string {
+  return value.replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/[-_]+/g," ").replace(/\s+/g," ").trim();
+}
+
+/** Build code-side vocabulary without requiring registry-side alias curation. */
+export function deriveQueryAliases(routes:VocabularyRoute[],configured:unknown):QueryAliases {
+  const generated:QueryAliases={...normalizeQueryAliases(configured)};
+  for (const route of routes) {
+    if (Object.keys(generated).length>=MAX_GROUPS) break;
+    if (route.route.includes("[")) continue;
+    const pathKey=route.route.replace(/^\//,"");
+    if (pathKey.length<2||pathKey.length>MAX_TERM_LENGTH) continue;
+    const canonical=readable(pathKey.replaceAll("/"," "));
+    const segments=pathKey.split("/").filter((item)=>item.length>=2);
+    const candidates=[pathKey,...segments,
+      ...(route.dataSources ?? []),...(route.backendDependencies ?? []),...(route.clientBoundaries ?? [])]
+      .flatMap((item)=>[item,readable(item)])
+      .map((item)=>item.trim()).filter((item)=>validTerm(item)&&item!==canonical);
+    const aliases=[...new Set(candidates)].slice(0,MAX_ALIASES_PER_GROUP);
+    if (aliases.length) {
+      generated[canonical]=[...new Set([...(generated[canonical] ?? []),...aliases])].slice(0,MAX_ALIASES_PER_GROUP);
+    }
+  }
+  return normalizeQueryAliases(generated);
 }
 
 function containsPhrase(query:string,phrase:string):boolean {

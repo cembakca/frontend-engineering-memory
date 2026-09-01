@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createHash } from "node:crypto";
 import type { MemoryDatabase } from "../memory/database.js";
 import { MemoryStore } from "../memory/store.js";
 import { loadRegistry, projectRoot } from "../config.js";
@@ -168,8 +169,8 @@ export async function runEvaluationFleet(memoryDb:MemoryDatabase,manifestFile=pa
 
 function parsed(value:string|undefined,fallback:any):any { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
 
-/** Produce a six/seven-case overlay draft from indexed structure; humans must review it before fleet admission. */
-export function scaffoldEvaluationOverlay(memoryDb:MemoryDatabase,repository:string,family:string):any {
+/** Produce a review draft or a deterministic source-derived smoke overlay. */
+export function scaffoldEvaluationOverlay(memoryDb:MemoryDatabase,repository:string,family:string,options:{generated?:boolean;role?:EvaluationRole}={}):any {
   const store=new MemoryStore(memoryDb);
   const repo=store.getRepository(repository) as any;
   if (!repo) throw new Error(`Repository not found: ${repository}`);
@@ -178,31 +179,35 @@ export function scaffoldEvaluationOverlay(memoryDb:MemoryDatabase,repository:str
   const primary=pages.find((route)=>parsed(route.backend_dependencies_json,[]).length||parsed(route.data_sources_json,[]).length) ?? pages[0] ?? routes[0];
   if (!primary) throw new Error(`Repository has no indexed routes: ${repository}`);
   const api=routes.find((route)=>route.route_type==="route-handler"||route.route_type==="api");
-  const prefix=repository.split(".").filter(Boolean).map((part)=>part[0]).join("").slice(0,8).toUpperCase()||"REPO";
+  const initials=repository.split(".").filter(Boolean).map((part)=>part[0]).join("").slice(0,4).toUpperCase()||"REPO";
+  const prefix=`${initials}${createHash("sha256").update(repository).digest("hex").slice(0,4).toUpperCase()}`;
   const evidence=[primary.source_file,...parsed(primary.behavior_files_json,[])].filter((value,index,all)=>value&&all.indexOf(value)===index).slice(0,4);
+  const flowParts=[...parsed(primary.data_sources_json,[]),...parsed(primary.backend_dependencies_json,[])];
+  const flowFact=flowParts.length ? `${primary.route} uses ${flowParts.join(" -> ")}` : `${primary.route} is implemented by ${primary.source_file}`;
   const cases:any[]=[
     {id:`${prefix}-E01`,job:"lookup",strict:true,question:`${primary.route} route'u hangi source dosyasından gelir ve rendering sinyali nedir?`,
       strictFact:`${primary.route} -> ${primary.source_file}; rendering=${primary.rendering_mode}`,forbiddenClaims:[],policy:"memory-sufficient",
       expectedEvidence:[primary.source_file],baselineReadSet:[primary.source_file],plan:[{tool:"memory_route",args:{route:primary.route}}]},
     {id:`${prefix}-F01`,job:"flow",strict:false,question:`${primary.route} sayfasının ana veri veya kullanıcı akışı nedir?`,
-      strictFact:"TODO: confirm the ordered source-to-backend flow",forbiddenClaims:[],policy:"targeted-source",
+      strictFact:options.generated?flowFact:"TODO: confirm the ordered source-to-backend flow",forbiddenClaims:[],policy:"targeted-source",
       expectedEvidence:evidence,baselineReadSet:evidence,plan:[{tool:"memory_context",args:{}}]},
     {id:`${prefix}-I01`,job:"impact",strict:false,question:`${primary.source_file} değişirse hangi route, component ve servisler etkilenir?`,
-      strictFact:"TODO: confirm the minimum reverse dependency surface",forbiddenClaims:["all routes are affected"],policy:"targeted-source",
+      strictFact:options.generated?`${primary.source_file} directly implements ${primary.route}`:"TODO: confirm the minimum reverse dependency surface",forbiddenClaims:["all routes are affected"],policy:"targeted-source",
       expectedEvidence:[primary.source_file],baselineReadSet:[primary.source_file],plan:[{tool:"memory_context",args:{}}]},
     {id:`${prefix}-P01`,job:"implementation",strict:false,question:`${primary.route} benzeri yeni bir sayfa eklerken hangi repository pattern'i izlenmeli?`,
-      strictFact:"TODO: confirm the closest repository-native exemplar",forbiddenClaims:[],policy:"targeted-source",
+      strictFact:options.generated?`${primary.source_file} is the indexed repository-native route exemplar`:"TODO: confirm the closest repository-native exemplar",forbiddenClaims:[],policy:"targeted-source",
       expectedEvidence:evidence,baselineReadSet:evidence,plan:[{tool:"memory_context",args:{}}]},
     {id:`${prefix}-V01`,job:"verify",strict:true,question:"Bu repository'de değişiklikten sonra hangi test, lint, typecheck ve build doğrulamaları çalıştırılabilir?",
-      strictFact:"TODO: verify package scripts and explicit test gaps",forbiddenClaims:[],policy:"report-gap",
+      strictFact:options.generated?"package.json is the authoritative source for available verification scripts":"TODO: verify package scripts and explicit test gaps",forbiddenClaims:[],policy:options.generated?"targeted-source":"report-gap",
       expectedEvidence:["package.json"],baselineReadSet:["package.json"],plan:[{tool:"memory_context",args:{}}]},
     {id:`${prefix}-N01`,job:"negative",strict:true,question:"Ekip bu Next.js mimarisini neden seçti?",
       strictFact:"No rationale is valid without a human-approved decision record",forbiddenClaims:["performance reasons","team preference"],policy:"abstain",
       expectedEvidence:[],baselineReadSet:[],plan:[{tool:"memory_context",args:{}}]},
   ];
   if (api) cases.splice(4,0,{id:`${prefix}-D01`,job:"debug",strict:true,question:`${api.route} handler'ı hangi doğrulanmış koşullarda hata döndürebilir?`,
-    strictFact:"TODO: confirm one exact guard/catch failure condition",forbiddenClaims:[],policy:"targeted-source",
+    strictFact:options.generated?`${api.route} is implemented by ${api.source_file}`:"TODO: confirm one exact guard/catch failure condition",forbiddenClaims:[],policy:"targeted-source",
     expectedEvidence:[api.source_file],baselineReadSet:[api.source_file],plan:[{tool:"memory_context",args:{}}]});
-  return {suite:`${repository} ${family} overlay`,repository,targetSha:repo.last_indexed_sha,draft:true,family,role:"overlay",
-    reviewRequired:["Replace every TODO strictFact with a source-verified claim","Confirm expectedEvidence and forbiddenClaims","Set draft=false only after a clean context-eval run"],cases};
+  return {suite:`${repository} ${family} ${options.role ?? "overlay"}`,repository,targetSha:repo.last_indexed_sha,
+    draft:!options.generated,family,role:options.role ?? "overlay",generated:Boolean(options.generated),
+    ...(options.generated?{}:{reviewRequired:["Replace every TODO strictFact with a source-verified claim","Confirm expectedEvidence and forbiddenClaims","Set draft=false only after a clean context-eval run"]}),cases};
 }

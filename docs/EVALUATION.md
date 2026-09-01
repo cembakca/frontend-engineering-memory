@@ -103,13 +103,15 @@ Representative suites must cover all seven jobs:
 
 Every overlay must include at least `lookup`, `flow`, `impact`, `verify`, and `negative`. It may add implementation/debug or cross-repository cases up to seven total. A repository with a route handler should normally use the seventh slot for a real handler failure condition.
 
-Generate an overlay draft only after the repository has been indexed:
+Normal onboarding indexes the repository, infers its family, creates a source-derived smoke overlay and updates the fleet assignment in one operation:
 
 ```bash
-pnpm memory eval-scaffold company.web.next --family=product-app
+pnpm onboard company.web.next --evaluate
 ```
 
-The scaffold deliberately contains `TODO` strict facts. It uses route inventory and behavior files to provide a bounded starting point, but generated assertions are not accepted as truth. Before admission:
+The generated overlay is deterministic and covers structural lookup, flow, impact, implementation, verification, negative behavior and, when available, a route-handler debug case. It is a repository smoke suite; architecture-family representatives remain the curated quality anchors.
+
+`pnpm memory eval-scaffold` remains available only when deliberately creating or replacing a curated regression suite. Its draft contains `TODO` facts and requires review:
 
 1. Replace every `TODO` with a claim verified from source.
 2. Confirm the minimum expected evidence; broad import closures are not focused evidence.
@@ -117,7 +119,7 @@ The scaffold deliberately contains `TODO` strict facts. It uses route inventory 
 4. Prefer questions copied from recent PRs, production incidents, onboarding, or actual developer prompts.
 5. Run the suite on a clean tree at its pinned target SHA.
 6. Set `draft:false` only after it passes without a primary miss.
-7. Add the suite to `config/evaluation-fleet.json`.
+7. Replace the generated assignment only when the curated suite is ready.
 
 Validate structure without running retrieval:
 
