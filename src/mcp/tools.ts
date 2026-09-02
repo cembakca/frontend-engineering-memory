@@ -86,19 +86,21 @@ function budgetRoutePayload(payload:any,maxChars:number):any {
 
 /** Stable identifiers a pack returned, so a retrieval miss can be traced without storing any content. */
 function packResultIds(pack:any):string[] {
-  if (Array.isArray(pack?.items)) return pack.items.map((item:any)=>`${item.type}:${item.subject}`);
-  if (Array.isArray(pack?.steps)) return pack.steps.map((step:any)=>String(step.to ?? step.affected ?? ""));
-  if (Array.isArray(pack?.relations)) return pack.relations.map((row:any)=>String(row.affected ?? row.packageName ?? row.providerRepository ?? ""));
-  if (Array.isArray(pack?.changes)) return pack.changes.map((row:any)=>String(row.entity ?? ""));
-  if (Array.isArray(pack?.facts)) return pack.facts.map((row:any)=>String(row.subject ?? ""));
-  return [];
+  const ids:string[]=[];
+  if (Array.isArray(pack?.items)) ids.push(...pack.items.map((item:any)=>`${item.type}:${item.subject}`));
+  if (Array.isArray(pack?.steps)) ids.push(...pack.steps.map((step:any)=>String(step.to ?? step.affected ?? "")));
+  if (Array.isArray(pack?.relations)) ids.push(...pack.relations.map((row:any)=>String(row.affected ?? row.packageName ?? row.providerRepository ?? "")));
+  if (Array.isArray(pack?.changes)) ids.push(...pack.changes.map((row:any)=>String(row.entity ?? "")));
+  if (Array.isArray(pack?.facts)) ids.push(...pack.facts.map((row:any)=>String(row.subject ?? "")));
+  if (Array.isArray(pack?.exemplars)) ids.push(...pack.exemplars.map((row:any)=>String(row.entity ?? row.subject ?? "")));
+  for (const values of Object.values(pack?.affected ?? {})) if (Array.isArray(values)) ids.push(...values.map(String));
+  if (Array.isArray(pack?.verification?.commands)) ids.push(...pack.verification.commands.map((row:any)=>`verify:${row.name}`));
+  if (Array.isArray(pack?.verification?.tests)) ids.push(...pack.verification.tests.map((row:any)=>`test:${row.key}`));
+  return ids.filter(Boolean);
 }
 
 function packResultCount(pack:any):number {
-  for (const key of ["items","steps","relations","changes","facts","exemplars"]) {
-    if (Array.isArray(pack?.[key])) return pack[key].length;
-  }
-  return 0;
+  return packResultIds(pack).length;
 }
 
 export class MemoryTools {

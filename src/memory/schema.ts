@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS memory_evidence (
   commit_sha TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_file ON memory_evidence(file_path, memory_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_memory ON memory_evidence(memory_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
   memory_id UNINDEXED,

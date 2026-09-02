@@ -19,9 +19,16 @@ import { matchingAliasRoute, normalizeQueryAliases } from "./query-vocabulary.js
 
 interface SemanticSnapshot {
   edges:GraphEdge[];
-  routes:ImpactRoute[];
+  routes:Array<ImpactRoute&{layoutChain:string[];clientBoundaries:string[]}>;
   files:string[];
   repoPath:string;
+}
+
+function jsonArray(value:unknown):string[] {
+  try {
+    const parsed=JSON.parse(String(value ?? "[]"));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch { return []; }
 }
 
 function terms(value:string):string[] {
@@ -159,7 +166,8 @@ export class TaskContextCompiler {
     const pending=(async()=>{
       const repoPath=String(row.path);
       const files=await walkFiles(repoPath);
-      const routes=this.store.listRoutes(repository).map((route:any)=>({route:route.route,sourceFile:route.source_file,routeType:route.route_type}));
+      const routes=this.store.listRoutes(repository).map((route:any)=>({route:route.route,sourceFile:route.source_file,routeType:route.route_type,
+        layoutChain:jsonArray(route.layout_chain_json),clientBoundaries:jsonArray(route.client_boundaries_json)}));
       const edges=await extractSymbolGraph(repoPath,files,routes.map((route)=>route.route));
       return {edges,routes,files,repoPath};
     })();
@@ -285,8 +293,17 @@ export class TaskContextCompiler {
       // SDK. In that case retain the ordinary service chain instead of returning
       // an empty focused pack.
       const trace=focused?.steps.length ? focused : traceFlow(semantic.edges,seed,{routeEntries,focus:"all"});
+      const routeRecord=resolvedRoute ? semantic.routes.find((route)=>routesEquivalent(route.route,resolvedRoute)) : undefined;
+      const routeDir=routeRecord?.sourceFile.slice(0,routeRecord.sourceFile.lastIndexOf("/"));
+      const localBoundaries=routeRecord&&routeDir ? routeRecord.clientBoundaries
+        .filter((file)=>file.startsWith(`${routeDir}/`))
+        .sort((a,b)=>Number(b===`${routeDir}/page.client.tsx`)-Number(a===`${routeDir}/page.client.tsx`)||a.localeCompare(b))
+        .slice(0,6) : [];
+      const includeRouteContext=/(?:kullanıcı akışı|user flow|layout|client boundary)/i.test(question);
       return compileContextPack({freshness,kind:"flow",query:question,repository:options.repository,snapshotSha,
-        trace,sourceFallback:trace.steps.length&&!trace.truncated ? [] : fallbackFiles},{maxChars});
+        trace,...(routeRecord&&includeRouteContext ? {routeContext:{route:routeRecord.route,sourceFile:routeRecord.sourceFile,
+          layouts:routeRecord.layoutChain,clientBoundaries:localBoundaries}} : {}),
+        sourceFallback:trace.steps.length&&!trace.truncated ? [] : fallbackFiles},{maxChars});
     }
 
     if (plan.intent==="impact") {

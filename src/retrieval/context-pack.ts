@@ -38,6 +38,7 @@ export interface FlowContextPack extends BasePack {
   endpoints:string[];
   config:string[];
   prunedSteps:number;
+  routeContext?:{route:string;sourceFile:string;layouts:string[];clientBoundaries:string[]};
 }
 
 export interface ImpactContextPack extends BasePack {
@@ -89,7 +90,7 @@ export type ContextPack=FlowContextPack|ImpactContextPack|ImplementationContextP
 
 interface CommonInput { query:string;repository:string;snapshotSha?:string|null;gaps?:string[];sourceFallback?:string[];freshness?:Record<string,unknown> }
 export type ContextPackInput=
-  |(CommonInput&{kind:"flow";trace:FlowTrace})
+  |(CommonInput&{kind:"flow";trace:FlowTrace;routeContext?:{route:string;sourceFile:string;layouts:string[];clientBoundaries:string[]}})
   |(CommonInput&{kind:"impact";trace:ImpactTrace})
   |(CommonInput&{kind:"implementation";exemplars:SearchResult[];impact?:ImpactTrace;verification?:VerificationGraph;verificationFirst?:boolean})
   |(CommonInput&{kind:"debug";facts:SearchResult[];trace?:FlowTrace;checks?:string[]})
@@ -157,6 +158,7 @@ function selectors(pack:ContextPack):{facts:string[];derivedRelations:string[];i
     inspectEvidence(pack.steps,"steps");
     if (pack.endpoints.length) derivedRelations.push("endpoints");
     if (pack.config.length) derivedRelations.push("config");
+    if (pack.routeContext&&(pack.routeContext.layouts.length||pack.routeContext.clientBoundaries.length)) derivedRelations.push("routeContext");
   } else if (pack.kind==="impact") {
     if (pack.relations.length) derivedRelations.push("relations");
     inspectEvidence(pack.relations,"relations");
@@ -242,7 +244,12 @@ export function compileContextPack(input:ContextPackInput,options:{maxChars?:num
   const effectiveMax=maxChars-240;
 
   if (input.kind==="flow") {
-    const pack:FlowContextPack={...base(input,maxChars),kind:"flow",seed:input.trace.seed,steps:[],endpoints:[],config:[],prunedSteps:input.trace.prunedSteps};
+    const pack:FlowContextPack={...base(input,maxChars),kind:"flow",seed:input.trace.seed,steps:[],endpoints:[],config:[],prunedSteps:input.trace.prunedSteps,
+      ...(input.routeContext ? {routeContext:{route:input.routeContext.route,sourceFile:input.routeContext.sourceFile,layouts:[],clientBoundaries:[]}} : {})};
+    if (pack.routeContext&&input.routeContext) {
+      copyStrings(pack,pack.routeContext.layouts,input.routeContext.layouts,"routeContext.layouts",effectiveMax);
+      copyStrings(pack,pack.routeContext.clientBoundaries,input.routeContext.clientBoundaries,"routeContext.clientBoundaries",effectiveMax);
+    }
     copyStrings(pack,pack.endpoints,input.trace.endpoints,"endpoints",effectiveMax);
     copyStrings(pack,pack.config,input.trace.config,"config",effectiveMax);
     for (const item of input.trace.steps) append(pack,pack.steps,{order:item.order,depth:item.depth,relation:item.edge,from:item.from,to:item.to,

@@ -32,7 +32,9 @@
       button.innerHTML =
         `<span class="pname">${esc(project.name)}</span>` +
         `<span class="pmeta"><span><i class="dot ${esc(freshness)}"></i>${esc(freshness)}</span>` +
-        `<span>${project.facts} facts</span><span>${project.routes} routes</span></span>`;
+        (project.facts == null
+          ? `<span>${esc(project.framework || "repository")}</span></span>`
+          : `<span>${project.facts} facts</span><span>${project.routes} routes</span></span>`);
       button.addEventListener("click", () => select(project.name));
       nav.appendChild(button);
     }
@@ -59,7 +61,7 @@
       metric("config declared, never read", project.unreadConfigKeys ?? 0,
         "dead configuration", (project.unreadConfigKeys ?? 0) === 0 ? "good" : "warn"),
     ].join("");
-    slot(root, "pcaNote").innerHTML = projection.explained.length
+    slot(root, "pcaNote").innerHTML = !projection ? "projection loading…" : projection.explained.length
       ? `first two axes hold <b>${Math.round(projection.explained.slice(0, 2).reduce((a, b) => a + b, 0) * 100)}%</b> of ${projection.dimension}-dim variance`
       : "no embeddings in this index";
   }
@@ -296,19 +298,28 @@
 
   /* ---------------- project view ---------------- */
   async function select(name) {
+    const selection = Symbol(name);
+    state.selection = selection;
     state.current = name;
+    localStorage.setItem("context-engine.repository", name);
+    const locationUrl = new URL(location.href);
+    locationUrl.searchParams.set("repo", name);
+    history.replaceState(null, "", locationUrl);
     renderRail();
     const main = $("#main");
-    main.innerHTML = `<div class="empty mono">projecting ${esc(name)} …</div>`;
+    main.innerHTML = `<div class="empty mono">loading ${esc(name)} …</div>`;
 
-    const project = state.projects.find((item) => item.name === name);
-    let projection;
+    let project;
     try {
-      projection = await api(`/api/ui/projection/${encodeURIComponent(name)}`);
+      project = await api(`/api/ui/project/${encodeURIComponent(name)}`);
     } catch (error) {
-      main.innerHTML = `<div class="empty mono">could not project this index: ${esc(error.message)}</div>`;
+      main.innerHTML = `<div class="empty mono">could not load this index: ${esc(error.message)}</div>`;
       return;
     }
+    if (state.selection !== selection) return;
+    const index = state.projects.findIndex((item) => item.name === name);
+    if (index >= 0) state.projects[index] = project;
+    renderRail();
 
     const view = document.importNode($("#tpl-project").content, true);
     slot(view, "eyebrow").textContent = `${project.framework || "repository"} · ${project.router || "?"} router`;
@@ -320,16 +331,25 @@
       `repository <b>${esc(project.name)}</b><br>` +
       `snapshot &nbsp;<b>${esc(String(project.lastIndexedSha || "—").slice(0, 10))}</b><br>` +
       `indexed &nbsp;&nbsp;<b>${esc(project.lastIndexedAt || "—")}</b><br>` +
-      `embedding <b>${projection.dimension}-dim</b> · local`;
+      `embedding <b>loading</b> · local`;
 
-    renderMetrics(view, project, projection);
+    renderMetrics(view, project, null);
     main.innerHTML = "";
     main.appendChild(view);
 
     const mounted = main;
-    if (projection.points.length >= 3) mountPlot(mounted, projection, name);
-    else slot(mounted, "inspect").innerHTML = `<p class="hint">This index has no embeddings, so there is nothing to project.<br>Re-index with MEMORY_EMBEDDINGS_ENABLED=1.</p>`;
     mountFlow(mounted, name);
+    try {
+      const projection = await api(`/api/ui/projection/${encodeURIComponent(name)}`);
+      if (state.selection !== selection) return;
+      slot(mounted, "stamp").innerHTML = slot(mounted, "stamp").innerHTML.replace(
+        "embedding <b>loading</b>", `embedding <b>${projection.dimension}-dim</b>`);
+      renderMetrics(mounted, project, projection);
+      if (projection.points.length >= 3) mountPlot(mounted, projection, name);
+      else slot(mounted, "inspect").innerHTML = `<p class="hint">This index has no embeddings, so there is nothing to project.<br>Re-index with MEMORY_EMBEDDINGS_ENABLED=1.</p>`;
+    } catch (error) {
+      slot(mounted, "pcaNote").textContent = `projection unavailable: ${error.message}`;
+    }
   }
 
   /* ---------------- boot ---------------- */
@@ -344,7 +364,9 @@
         renderRail();
         return;
       }
-      await select(state.projects[0].name);
+      const requested = new URL(location.href).searchParams.get("repo") || localStorage.getItem("context-engine.repository");
+      const initial = state.projects.some((project) => project.name === requested) ? requested : state.projects[0].name;
+      await select(initial);
     } catch (error) {
       $("#main").innerHTML = `<div class="empty mono">index unavailable: ${esc(error.message)}</div>`;
     }

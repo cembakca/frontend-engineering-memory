@@ -144,6 +144,20 @@ export class MemoryStore {
       WHERE repo.name=? ORDER BY rs.id DESC`).all(repositoryName) as Array<{sha:string;createdAt:string}>;
   }
 
+  /** Reads only the current graph blob; the UI must not hydrate the much larger full snapshot. */
+  getRepositoryGraph(repositoryName:string):GraphEdge[] {
+    const row=this.db.prepare(`
+      SELECT rs.graph_json
+      FROM repositories repo
+      JOIN repository_snapshots rs ON rs.repository_id=repo.id AND rs.sha=repo.last_indexed_sha
+      WHERE repo.name=? AND repo.retired_at IS NULL
+      LIMIT 1
+    `).get(repositoryName) as {graph_json:string}|undefined;
+    if (!row) return [];
+    try { return JSON.parse(row.graph_json) as GraphEdge[]; }
+    catch { return []; }
+  }
+
   addRepositoryDecision(repositoryName:string,value:DecisionInput):number {
     const input=validateDecision(value);
     const repository=this.getRepository(repositoryName) as {id:number}|undefined;

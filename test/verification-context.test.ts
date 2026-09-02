@@ -47,23 +47,27 @@ test("a repository product alias anchors flow traversal at the matching route so
     await writeFile(path.join(root,"package.json"),JSON.stringify({scripts:{build:"next build"}},null,2));
     await writeFile(path.join(root,"src/app/products/page.tsx"),
       'import { getProducts } from "../../lib/products";\nexport default async function Page(){ return getProducts(); }\n');
+    await writeFile(path.join(root,"src/app/products/page.client.tsx"),'export default function ProductsClient(){ return null }\n');
+    await writeFile(path.join(root,"src/app/layout.tsx"),'export default function Layout({children}:any){ return children }\n');
     await writeFile(path.join(root,"src/lib/products.ts"),
       'export function getProducts(){ return "products"; }\n');
     memoryDb.db.prepare(
       "INSERT INTO repositories(name,path,framework,next_version,router_type,query_aliases_json,last_indexed_sha) VALUES(?,?,?,?,?,?,?)",
     ).run("fixture",root,"Next.js","16.3.0","app",JSON.stringify({"ürünler":["products"]}),"a".repeat(40));
     memoryDb.db.prepare(
-      "INSERT INTO routes(repository_id,route,route_type,router_type,source_file,rendering_mode,last_seen_sha) VALUES(1,'/products','page','app','src/app/products/page.tsx','rsc',?)",
-    ).run("a".repeat(40));
+      "INSERT INTO routes(repository_id,route,route_type,router_type,source_file,rendering_mode,layout_chain_json,client_boundaries_json,last_seen_sha) VALUES(1,'/products','page','app','src/app/products/page.tsx','rsc',?,?,?)",
+    ).run(JSON.stringify(["src/app/layout.tsx"]),JSON.stringify(["src/app/products/page.client.tsx"]),"a".repeat(40));
 
     const pack=await new TaskContextCompiler(memoryDb).compile(
-      "Ürünler sayfası veriyi hangi akışla alır?",
+      "Ürünler sayfasının ana veri veya kullanıcı akışı nedir?",
       {repository:"fixture"},
     ) as any;
 
     assert.equal(pack.kind,"flow");
     assert.match(pack.seed,/src\/app\/products\/page\.tsx#Page/);
     assert.ok(pack.steps.some((item:any)=>item.to==="src/lib/products.ts#getProducts"));
+    assert.deepEqual(pack.routeContext.layouts,["src/app/layout.tsx"]);
+    assert.deepEqual(pack.routeContext.clientBoundaries,["src/app/products/page.client.tsx"]);
   } finally {
     memoryDb.close();
     await rm(root,{recursive:true,force:true});

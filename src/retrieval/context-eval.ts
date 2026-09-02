@@ -85,14 +85,20 @@ function summarizeResult(tool:ToolName,result:any):string[] {
     return [`route:${result.route} rendering=${result.rendering} source=${result.sourceFile} deps=${result.dependencyCounts?.total ?? 0}`];
   }
   // memory_context returns one of several discriminated packs.
-  if (Array.isArray(result.items)) return result.items.map((item:any)=>`${item.type}:${item.subject} [${(item.channels ?? []).join("+")}]`);
-  if (Array.isArray(result.steps)) return result.steps.map((step:any)=>`${step.relation ?? step.via}:${step.to ?? step.affected}`);
-  if (Array.isArray(result.relations)) return result.relations.map((row:any)=>`${row.relation}:${row.affected}`);
-  if (Array.isArray(result.exemplars)) return result.exemplars.map((row:any)=>`${row.type ?? "fact"}:${row.subject}`);
-  if (Array.isArray(result.facts)) return result.facts.map((row:any)=>`${row.type ?? "fact"}:${row.subject}`);
-  if (Array.isArray(result.decisions)) return result.decisions.map((row:any)=>`decision:${row.decision_key ?? row.title}`);
-  if (Array.isArray(result.changes)) return result.changes.map((row:any)=>`change:${row.entity}`);
-  return [`pack:${result.kind ?? "unknown"}`];
+  const returned:string[]=[];
+  if (Array.isArray(result.items)) returned.push(...result.items.map((item:any)=>`${item.type}:${item.subject} [${(item.channels ?? []).join("+")}]`));
+  if (Array.isArray(result.steps)) returned.push(...result.steps.map((step:any)=>`${step.relation ?? step.via}:${step.to ?? step.affected}`));
+  if (Array.isArray(result.relations)) returned.push(...result.relations.map((row:any)=>`${row.relation}:${row.affected}`));
+  if (Array.isArray(result.exemplars)) returned.push(...result.exemplars.map((row:any)=>`${row.type ?? "fact"}:${row.subject}`));
+  if (Array.isArray(result.facts)) returned.push(...result.facts.map((row:any)=>`${row.type ?? "fact"}:${row.subject}`));
+  if (Array.isArray(result.decisions)) returned.push(...result.decisions.map((row:any)=>`decision:${row.decision_key ?? row.title}`));
+  if (Array.isArray(result.changes)) returned.push(...result.changes.map((row:any)=>`change:${row.entity}`));
+  for (const [kind,values] of Object.entries(result.affected ?? {})) {
+    if (Array.isArray(values)) returned.push(...values.map((value)=>`affected.${kind}:${value}`));
+  }
+  if (Array.isArray(result.verification?.commands)) returned.push(...result.verification.commands.map((row:any)=>`verify:${row.name}`));
+  if (Array.isArray(result.verification?.tests)) returned.push(...result.verification.tests.map((row:any)=>`test:${row.key}`));
+  return returned.length ? returned : [`pack:${result.kind ?? "unknown"}`];
 }
 
 interface FileFactSummary { file:string; focusedTypes:string[]; broadTypes:string[]; }

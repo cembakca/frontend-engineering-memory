@@ -56,7 +56,7 @@ function principalComponents(rows:number[][],dimension:number,count:number):{com
 
   for (let k=0;k<count;k+=1) {
     let vector=new Array(dimension).fill(0).map(random);
-    for (let iteration=0;iteration<220;iteration+=1) {
+    for (let iteration=0;iteration<80;iteration+=1) {
       const next=multiply(vector);
       for (const component of components) {
         const dot=next.reduce((sum,value,index)=>sum+value*component[index]!,0);
@@ -64,7 +64,10 @@ function principalComponents(rows:number[][],dimension:number,count:number):{com
       }
       const length=norm(next);
       if (length<1e-12) break;
-      vector=next.map((value)=>value/length);
+      const normalized=next.map((value)=>value/length);
+      const alignment=Math.abs(normalized.reduce((sum,value,index)=>sum+value*vector[index]!,0));
+      vector=normalized;
+      if (1-alignment<1e-7) break;
     }
     const applied=multiply(vector);
     eigenvalues.push(applied.reduce((sum,value,index)=>sum+value*vector[index]!,0));

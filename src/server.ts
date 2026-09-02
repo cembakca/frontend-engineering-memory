@@ -10,8 +10,7 @@ import { RetrievalTelemetry } from "./telemetry/retrieval-telemetry.js";
 import { hybridSearch } from "./retrieval/search.js";
 import { fullIndex, incrementalSync } from "./sync/sync.js";
 import { startRegistrySupervisor } from "./sync/supervisor.js";
-import { evaluateFreshness } from "./retrieval/freshness.js";
-import { extractSymbolGraph } from "./analyzers/symbol-graph.js";
+import { FreshnessCache } from "./retrieval/freshness.js";
 import { routeEntriesFrom, traceFlow } from "./retrieval/flow.js";
 import { createMemoryMcpHttpHandler } from "./mcp/server.js";
 import { authenticateWebhook, parseWebhook, WebhookError } from "./webhook.js";
@@ -52,9 +51,6 @@ async function serveUi(res:http.ServerResponse,pathname:string):Promise<boolean>
   } catch { return false; }
 }
 
-/** The symbol graph is derived from the checkout, so it is cached per repository. */
-const graphCache=new Map<string,Promise<{edges:Awaited<ReturnType<typeof extractSymbolGraph>>;routeFiles:Map<string,string>}>>();
-
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function enqueue<T>(job: () => Promise<T>): Promise<T> {
@@ -68,6 +64,8 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
   const feedback = new AnswerFeedback(memoryDb);
   const telemetry = new RetrievalTelemetry(memoryDb);
   const projections = new ProjectionCache(memoryDb);
+  const freshnessCache = new FreshnessCache(memoryDb);
+  const graphCache=new Map<string,{edges:ReturnType<MemoryStore["getRepositoryGraph"]>;routeFiles:Map<string,string>}>();
   const mcp = createMemoryMcpHttpHandler(memoryDb);
   const host = process.env.MEMORY_HOST ?? "127.0.0.1";
   const port = Number(process.env.MEMORY_PORT ?? 4317);
@@ -86,23 +84,33 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
         if (await serveUi(res,url.pathname)) return;
       }
       if (req.method === "GET" && url.pathname === "/api/ui/projects") {
-        const repositories=[];
-        for (const repository of store.listRepositories() as any[]) {
-          let freshness:any=null;
-          try { freshness=await evaluateFreshness(memoryDb,repository.name); } catch { /* path may be unavailable */ }
-          const quality=store.qualityReport(repository.name) as any;
-          repositories.push({
-            name:repository.name,framework:repository.framework,nextVersion:repository.next_version,
-            reactVersion:repository.react_version,router:repository.router_type,
-            lastIndexedSha:repository.last_indexed_sha,lastIndexedAt:repository.last_indexed_at,
-            facts:quality.activeMemories,vectors:quality.vectors,routes:quality.routes,
-            duplicationRatio:quality.duplicationRatio,evidenceCoverage:quality.evidenceCoverage,
-            symbolCoverage:quality.symbolCoverage,unreadConfigKeys:quality.unreadConfigKeys,
-            freshness:freshness ? {state:freshness.state,driftCommits:freshness.driftCommits,
-              workingTreeDirty:freshness.workingTreeDirty,guidance:freshness.answerGuidance} : null,
-          });
-        }
+        // Boot payload stays deliberately small. Quality and Git freshness are
+        // computed only for the repository the user actually opens.
+        const repositories=(store.listRepositories() as any[]).map((repository)=>({
+          name:repository.name,framework:repository.framework,nextVersion:repository.next_version,
+          reactVersion:repository.react_version,router:repository.router_type,
+          lastIndexedSha:repository.last_indexed_sha,lastIndexedAt:repository.last_indexed_at,
+        }));
         return json(res,200,{vectorEnabled:memoryDb.vectorEnabled,repositories});
+      }
+      const projectMatch=url.pathname.match(/^\/api\/ui\/project\/([^/]+)$/);
+      if (req.method === "GET" && projectMatch) {
+        const name=decodeURIComponent(projectMatch[1]!);
+        const repository=store.getRepository(name) as any;
+        if (!repository) return json(res,404,{error:"repository not found"});
+        const [freshness,quality]=await Promise.all([
+          freshnessCache.get(name),Promise.resolve(store.qualityReport(name) as any),
+        ]);
+        return json(res,200,{
+          name:repository.name,framework:repository.framework,nextVersion:repository.next_version,
+          reactVersion:repository.react_version,router:repository.router_type,
+          lastIndexedSha:repository.last_indexed_sha,lastIndexedAt:repository.last_indexed_at,
+          facts:quality.activeMemories,vectors:quality.vectors,routes:quality.routes,
+          duplicationRatio:quality.duplicationRatio,evidenceCoverage:quality.evidenceCoverage,
+          symbolCoverage:quality.symbolCoverage,unreadConfigKeys:quality.unreadConfigKeys,
+          freshness:freshness ? {state:freshness.state,driftCommits:freshness.driftCommits,
+            workingTreeDirty:freshness.workingTreeDirty,guidance:freshness.answerGuidance} : null,
+        });
       }
       const projectionMatch=url.pathname.match(/^\/api\/ui\/projection\/([^/]+)$/);
       if (req.method === "GET" && projectionMatch) {
@@ -129,18 +137,15 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
       const flowMatch=url.pathname.match(/^\/api\/ui\/flow\/([^/]+)$/);
       if (req.method === "GET" && flowMatch) {
         const repository=decodeURIComponent(flowMatch[1]!);
-        const config=await getRepositoryConfig(repository);
+        const repo=store.getRepository(repository) as any;
+        if (!repo) return json(res,404,{error:"repository not found"});
         const routes=store.listRoutes(repository) as any[];
-        if (!graphCache.has(repository)) {
-          graphCache.set(repository,(async()=>{
-            // Same file set the indexer uses, so generated output stays out of the graph.
-            const { listAnalyzableSourceFiles }=await import("./analyzers/source-memory.js");
-            const files=(await listAnalyzableSourceFiles(config.path)).filter((file)=>/\.(ts|tsx)$/.test(file));
-            const routeFiles=new Map(routes.map((route)=>[route.route as string,route.source_file as string]));
-            return {edges:await extractSymbolGraph(config.path,files,[...routeFiles.keys()]),routeFiles};
-          })());
+        const graphKey=`${repository}:${repo.last_indexed_sha ?? "none"}`;
+        if (!graphCache.has(graphKey)) {
+          graphCache.set(graphKey,{edges:store.getRepositoryGraph(repository),
+            routeFiles:new Map(routes.map((route)=>[route.route as string,route.source_file as string]))});
         }
-        const { edges, routeFiles }=await graphCache.get(repository)!;
+        const { edges, routeFiles }=graphCache.get(graphKey)!;
         const seed=url.searchParams.get("seed")
           ?? edges.find((edge)=>edge.type==="submits-to")?.from
           ?? edges.find((edge)=>edge.from.includes("#"))?.from;
