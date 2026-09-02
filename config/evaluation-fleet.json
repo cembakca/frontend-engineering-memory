@@ -3,11 +3,11 @@
   "policy": {
     "representativeCases": {
       "min": 10,
-      "max": 15
+      "max": 17
     },
     "overlayCases": {
       "min": 5,
-      "max": 7
+      "max": 9
     },
     "requiredRepresentativeJobs": [
       "lookup",

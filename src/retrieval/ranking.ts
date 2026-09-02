@@ -1,7 +1,15 @@
 import type { MemoryType, SearchResult } from "../types.js";
 import type { TaskIntent } from "./intent.js";
+import { relevanceScore } from "./relevance.js";
 
-const WEIGHTS={taskFit:.25,relationCoverage:.25,freshness:.2,evidenceQuality:.15,entitySpecificity:.1,channelRelevance:.05} as const;
+/**
+ * Every feature except `queryRelevance` and `channelRelevance` is identical for
+ * all candidates of the same shape, so without a query-dependent term a route
+ * lookup was decided by channel order alone. `queryRelevance` carries the
+ * question itself and is weighted accordingly.
+ */
+const WEIGHTS={taskFit:.2,queryRelevance:.25,relationCoverage:.18,freshness:.12,evidenceQuality:.15,
+  entitySpecificity:.05,channelRelevance:.05} as const;
 
 function clamp(value:number):number { return Math.max(0,Math.min(1,value)); }
 
@@ -67,9 +75,10 @@ function channelRelevance(result:SearchResult):number {
   return 1/Math.min(...ranks);
 }
 
-function features(result:SearchResult,intent:TaskIntent):NonNullable<SearchResult["ranking"]>["features"] {
+function features(result:SearchResult,intent:TaskIntent,terms:Set<string>):NonNullable<SearchResult["ranking"]>["features"] {
   return {
     taskFit:taskFit(result,intent),
+    queryRelevance:relevanceScore(terms,{subject:result.subject,sourceFile:result.sourceFile,content:result.content}),
     relationCoverage:clamp(result.relationCoverage ?? (result.channels.includes("graph") ? .8 : .2)),
     freshness:freshness(result),
     evidenceQuality:evidenceQuality(result),
@@ -82,27 +91,40 @@ function weightedScore(value:ReturnType<typeof features>):number {
   return Object.entries(WEIGHTS).reduce((sum,[name,weight])=>sum+value[name as keyof typeof value]*weight,0);
 }
 
-function mergeGroup(group:SearchResult[],intent:TaskIntent):SearchResult {
+/** The best rank each channel gave any member of the group; a strong FTS hit on a duplicate still counts. */
+function mergeChannelRanks(group:SearchResult[]):SearchResult["channelRanks"] {
+  const merged:Record<string,number>={};
+  for (const item of group) {
+    for (const [channel,rank] of Object.entries(item.channelRanks ?? {})) {
+      if (rank==null||rank<=0) continue;
+      merged[channel]=Math.min(merged[channel] ?? Infinity,rank);
+    }
+  }
+  return merged as SearchResult["channelRanks"];
+}
+
+function mergeGroup(group:SearchResult[],intent:TaskIntent,terms:Set<string>):SearchResult {
+  const channelRanks=mergeChannelRanks(group);
   const ranked=group.map((item)=>{
-    const itemFeatures=features(item,intent);
+    const itemFeatures=features({...item,channelRanks},intent,terms);
     return {...item,canonicalEntity:canonicalEntityKey(item),ranking:{score:weightedScore(itemFeatures),features:itemFeatures}};
   }).sort((a,b)=>b.ranking.score-a.ranking.score||a.id-b.id);
   const primary=ranked[0]!;
   const channels=[...new Set(ranked.flatMap((item)=>item.channels))];
   const sourceFiles=[...new Set(ranked.flatMap((item)=>item.sourceFiles ?? (item.sourceFile ? [item.sourceFile] : [])))];
   const duplicateIds=ranked.slice(1).map((item)=>item.id);
-  return {...primary,score:primary.ranking.score,channels,sourceFiles,duplicateIds};
+  return {...primary,score:primary.ranking.score,channels,channelRanks,sourceFiles,duplicateIds};
 }
 
 /** Rank canonical entities with explicit features; channel scores are never added together. */
-export function rankAndDedupe(results:SearchResult[],intent:TaskIntent,limit=10):SearchResult[] {
+export function rankAndDedupe(results:SearchResult[],intent:TaskIntent,limit=10,terms:Set<string>=new Set()):SearchResult[] {
   const groups=new Map<string,SearchResult[]>();
   for (const result of results) {
     const key=canonicalEntityKey(result);
     const bucket=groups.get(key);
     if (bucket) bucket.push(result); else groups.set(key,[result]);
   }
-  return [...groups.values()].map((group)=>mergeGroup(group,intent))
+  return [...groups.values()].map((group)=>mergeGroup(group,intent,terms))
     .sort((a,b)=>(b.ranking?.score ?? 0)-(a.ranking?.score ?? 0)||a.canonicalEntity!.localeCompare(b.canonicalEntity!))
     .slice(0,Math.max(1,limit));
 }

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { URL } from "node:url";
@@ -13,12 +13,36 @@ import { startRegistrySupervisor } from "./sync/supervisor.js";
 import { FreshnessCache } from "./retrieval/freshness.js";
 import { routeEntriesFrom, traceFlow } from "./retrieval/flow.js";
 import { createMemoryMcpHttpHandler } from "./mcp/server.js";
+import { MemoryTools } from "./mcp/tools.js";
 import { authenticateWebhook, parseWebhook, WebhookError } from "./webhook.js";
 import { ProjectionCache } from "./ui/projection.js";
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
   res.writeHead(status,{"content-type":"application/json; charset=utf-8"});
   res.end(JSON.stringify(body,null,2));
+}
+
+function parseJson(value:unknown,fallback:any):any {
+  try { return value ? JSON.parse(String(value)) : fallback; }
+  catch { return fallback; }
+}
+
+async function evaluationObservations(repository:string):Promise<any[]> {
+  const directory=path.join(projectRoot(),"config","eval-observations");
+  try {
+    const files=(await readdir(directory)).filter((file)=>file.endsWith(".json"));
+    const observations=[];
+    for (const file of files) {
+      try {
+        const value=JSON.parse(await readFile(path.join(directory,file),"utf8"));
+        if (value.repository!==repository) continue;
+        observations.push({file,caseId:value.caseId,date:value.date ?? value.ranAt,prompt:value.prompt,
+          model:value.model,reasoningEffort:value.reasoningEffort,medians:value.medians ?? value.median,
+          savingsPercent:value.savingsPercent ?? value.median?.saving,correctness:value.correctness});
+      } catch { /* malformed observations do not break the operational UI */ }
+    }
+    return observations;
+  } catch { return []; }
 }
 
 async function rawBody(req: http.IncomingMessage): Promise<string> {
@@ -63,6 +87,7 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
   const store = new MemoryStore(memoryDb);
   const feedback = new AnswerFeedback(memoryDb);
   const telemetry = new RetrievalTelemetry(memoryDb);
+  const uiTools = new MemoryTools(memoryDb);
   const projections = new ProjectionCache(memoryDb);
   const freshnessCache = new FreshnessCache(memoryDb);
   const graphCache=new Map<string,{edges:ReturnType<MemoryStore["getRepositoryGraph"]>;routeFiles:Map<string,string>}>();
@@ -134,6 +159,52 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
         return json(res,200,{query,matches:projections.search(decodeURIComponent(vectorSearchMatch[1]!),vector,
           Number(url.searchParams.get("limit") ?? 6))});
       }
+      const askMatch=url.pathname.match(/^\/api\/ui\/ask\/([^/]+)$/);
+      if (req.method === "POST" && askMatch) {
+        const repository=decodeURIComponent(askMatch[1]!);
+        const payload=await body(req);
+        const question=String(payload.question ?? "").trim();
+        if (question.length<3) return json(res,400,{error:"question must be at least 3 characters"});
+        if (question.length>2_000) return json(res,400,{error:"question must be at most 2000 characters"});
+        const started=Date.now();
+        const pack=await uiTools.context(question,{repository,maxChars:Number(payload.maxChars) || undefined});
+        return json(res,200,{question,durationMs:Date.now()-started,pack});
+      }
+      const uiRoutesMatch=url.pathname.match(/^\/api\/ui\/routes\/([^/]+)$/);
+      if (req.method === "GET" && uiRoutesMatch) {
+        const repository=decodeURIComponent(uiRoutesMatch[1]!);
+        if (!store.getRepository(repository)) return json(res,404,{error:"repository not found"});
+        const query=(url.searchParams.get("q") ?? "").trim().toLocaleLowerCase("tr-TR");
+        const all=store.listRoutes(repository) as any[];
+        const filtered=query ? all.filter((row)=>`${row.route} ${row.source_file} ${row.rendering_mode}`.toLocaleLowerCase("tr-TR").includes(query)) : all;
+        const limit=Math.max(1,Math.min(250,Number(url.searchParams.get("limit") ?? 120)));
+        return json(res,200,{repository,total:all.length,matched:filtered.length,routes:filtered.slice(0,limit).map((row)=>({
+          route:row.route,type:row.route_type,sourceFile:row.source_file,rendering:row.rendering_mode,
+          serverComponent:row.server_component==null ? null : Boolean(row.server_component),
+          authRequired:row.auth_required==null ? null : Boolean(row.auth_required),
+          dataSources:parseJson(row.data_sources_json,[]).length,
+          backendDependencies:parseJson(row.backend_dependencies_json,[]).length,
+          cache:parseJson(row.cache_behavior_json,[]),
+        }))});
+      }
+      const uiRouteMatch=url.pathname.match(/^\/api\/ui\/route\/([^/]+)$/);
+      if (req.method === "GET" && uiRouteMatch) {
+        const route=url.searchParams.get("route");
+        if (!route) return json(res,400,{error:"route is required"});
+        try { return json(res,200,uiTools.route(decodeURIComponent(uiRouteMatch[1]!),route,{detail:"full",maxChars:24_000})); }
+        catch (error) { return json(res,404,{error:(error as Error).message}); }
+      }
+      const economyMatch=url.pathname.match(/^\/api\/ui\/economy\/([^/]+)$/);
+      if (req.method === "GET" && economyMatch) {
+        const repository=decodeURIComponent(economyMatch[1]!);
+        if (!store.getRepository(repository)) return json(res,404,{error:"repository not found"});
+        const recent=telemetry.recent(repository,24).map((row:any)=>({
+          ...row,queryShape:parseJson(row.query_shape_json,{}),gaps:parseJson(row.gaps_json,[]),
+          query_shape_json:undefined,gaps_json:undefined,
+        }));
+        return json(res,200,{repository,report:telemetry.report(repository),recent,
+          observations:await evaluationObservations(repository)});
+      }
       const flowMatch=url.pathname.match(/^\/api\/ui\/flow\/([^/]+)$/);
       if (req.method === "GET" && flowMatch) {
         const repository=decodeURIComponent(flowMatch[1]!);
@@ -151,8 +222,10 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
           ?? edges.find((edge)=>edge.from.includes("#"))?.from;
         if (!seed) return json(res,200,{seed:null,steps:[],endpoints:[],config:[],prunedSteps:0,entryPoints:[]});
         const trace=traceFlow(edges,seed,{routeEntries:routeEntriesFrom(edges,routeFiles),maxSteps:24});
-        const entryPoints=[...new Set(edges.filter((edge)=>edge.type==="submits-to"||/#(?:handleSubmit|POST|GET)$/.test(edge.from))
-          .map((edge)=>edge.from))].slice(0,12);
+        // Typed submit boundaries plus framework HTTP entry points; no project
+        // handler-naming convention is assumed.
+        const entryPoints=[...new Set(edges.filter((edge)=>edge.type==="submits-to"
+          ||/#(?:POST|GET|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(edge.from)).map((edge)=>edge.from))].slice(0,12);
         return json(res,200,{...trace,entryPoints,totalEdges:edges.length,
           edgeTypes:edges.reduce((counts:Record<string,number>,edge)=>{counts[edge.type]=(counts[edge.type] ?? 0)+1;return counts;},{})});
       }

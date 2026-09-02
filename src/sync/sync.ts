@@ -1,7 +1,7 @@
 import path from "node:path";
 import { access } from "node:fs/promises";
 import {
-  analyzeProjectFile, analyzeRepositoryDependencies, analyzeRepositoryProfile, analyzeSourceFile,
+  analyzeProjectFile, analyzeRepositoryDependencies, analyzeRepositoryProfile, analyzeRouteRewrites, analyzeSourceFile,
   canonicalizeMemories, dependencyMemories, listAnalyzableSourceFiles, listProjectAnalysisFiles, repositoryProfileMemory,
   routeMemory, scanRoutes,
 } from "../analyzers/index.js";
@@ -39,7 +39,7 @@ function routeKey(route:Pick<RouteRecord,"route"|"sourceFile">):string { return 
 export async function fullIndex(config:RepositoryConfig,memoryDb:MemoryDatabase,options:SyncOptions={}):Promise<object> {
   const {head,profile,store,existing}=await baseline(config,memoryDb,options);
   const routes=await scanRoutes(config.path);
-  const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases)};
+  const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases,await analyzeRouteRewrites(config.path))};
   const dependencies=await analyzeRepositoryDependencies(config.path);
   const sourceFiles=await listAnalyzableSourceFiles(config.path);
   const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
@@ -83,7 +83,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   const repositoryId=existing.id;
   if (fromSha===head) {
     const routes=await scanRoutes(config.path);
-    const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases)};
+    const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases,await analyzeRouteRewrites(config.path))};
     const sourceFiles=await listAnalyzableSourceFiles(config.path);
     const graph=await extractSymbolGraph(config.path,sourceFiles,routes.map((route)=>route.route));
     store.transaction(()=>{
@@ -103,7 +103,7 @@ export async function incrementalSync(config:RepositoryConfig,memoryDb:MemoryDat
   const classified=changes.map((change)=>({...change,classification:classifyFile(change.path)}));
   const relevant=classified.filter((change)=>change.classification.memoryRelevant);
   const routes=await scanRoutes(config.path);
-  const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases)};
+  const indexedConfig={...config,queryAliases:deriveQueryAliases(routes,config.queryAliases,await analyzeRouteRewrites(config.path))};
   const snapshotFiles=await listAnalyzableSourceFiles(config.path);
   const graph=await extractSymbolGraph(config.path,snapshotFiles,routes.map((route)=>route.route));
   const changedPaths=new Set(changes.flatMap((change)=>change.previousPath ? [change.previousPath,change.path] : [change.path]));

@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Context Engine — index readout</title>
+<link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
+<a class="skip-nav" href="#main">Skip to workspace</a>
 <div class="shell">
   <aside class="rail">
     <div class="brand">
@@ -37,7 +39,70 @@
 
   <section class="metrics" data-slot="metrics"></section>
 
-  <section class="block">
+  <nav class="workspace-tabs" aria-label="Repository workspace">
+    <button type="button" data-view="ask" aria-selected="true"><span>01</span> Ask Memory</button>
+    <button type="button" data-view="routes" aria-selected="false"><span>02</span> Routes</button>
+    <button type="button" data-view="economy" aria-selected="false"><span>03</span> Economy</button>
+    <button type="button" data-view="lab" aria-selected="false"><span>04</span> Index Lab</button>
+  </nav>
+
+  <section class="workspace-panel" data-panel="ask">
+    <div class="workspace-intro">
+      <div><div class="eyebrow">Memory query workbench</div><h2>Ask the index before opening source.</h2></div>
+      <p>Inspect the exact bounded pack an MCP client receives—intent, evidence, uncertainty and targeted fallback included.</p>
+    </div>
+    <form class="ask-form" data-slot="askForm">
+      <label for="memory-question" class="eyebrow">Question</label>
+      <textarea id="memory-question" data-slot="askInput" rows="4" maxlength="2000" placeholder="Kart sihirbazı ana sayfası hangi route ve source dosyasındadır?"></textarea>
+      <div class="ask-controls">
+        <div class="prompt-presets" data-slot="askPresets" aria-label="Example questions"></div>
+        <button class="primary-action" type="submit">Compile memory pack <span>↗</span></button>
+      </div>
+    </form>
+    <div class="query-status mono" data-slot="askStatus" aria-live="polite">ready · no agent source fallback requested</div>
+    <div class="pack-output" data-slot="askOutput" hidden></div>
+  </section>
+
+  <section class="workspace-panel" data-panel="routes" hidden>
+    <div class="workspace-intro">
+      <div><div class="eyebrow">Structured route inventory</div><h2>Find the runtime surface.</h2></div>
+      <p>Search route identity and source together, then inspect rendering, layouts, data boundaries and dependencies without scanning the tree.</p>
+    </div>
+    <div class="route-explorer">
+      <div class="route-index">
+        <form class="route-search" data-slot="routeSearchForm">
+          <label class="eyebrow" for="route-query">Filter routes</label>
+          <input id="route-query" type="search" data-slot="routeSearchInput" placeholder="/kart-sihirbazi or page.tsx" autocomplete="off">
+        </form>
+        <div class="route-count mono" data-slot="routeCount" aria-live="polite"></div>
+        <div class="route-list" data-slot="routeList"></div>
+      </div>
+      <article class="route-detail" data-slot="routeDetail">
+        <p class="hint">Select a route to inspect its indexed runtime contract.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="workspace-panel" data-panel="economy" hidden>
+    <div class="workspace-intro">
+      <div><div class="eyebrow">MCP economy ledger</div><h2>Measure what retrieval avoided.</h2></div>
+      <p>Live pack telemetry and controlled Codex A/B observations remain separate, so estimated context cost is never mistaken for model billing.</p>
+    </div>
+    <div class="economy-summary" data-slot="economySummary"></div>
+    <div class="economy-grid">
+      <section class="ledger-panel">
+        <div class="panel-title"><div><div class="eyebrow">Controlled observations</div><h3>Codex A/B evidence</h3></div><span class="status-mark good">verified</span></div>
+        <div data-slot="observations"></div>
+      </section>
+      <section class="ledger-panel">
+        <div class="panel-title"><div><div class="eyebrow">Live retrievals</div><h3>Recent memory traffic</h3></div><span class="status-mark" data-slot="eventCount"></span></div>
+        <div class="event-list mono" data-slot="events"></div>
+      </section>
+    </div>
+  </section>
+
+  <section class="workspace-panel" data-panel="lab" hidden>
+  <section class="block lab-block">
     <div class="block-head">
       <div>
         <div class="eyebrow">Instrument I — the index, projected</div>
@@ -92,6 +157,7 @@
       <ol class="steps mono" data-slot="steps"></ol>
       <div class="trace-foot mono" data-slot="traceFoot"></div>
     </div>
+  </section>
   </section>
 </template>
 

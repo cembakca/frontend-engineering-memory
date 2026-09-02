@@ -1,5 +1,6 @@
 {
   "caseId": "RVT-F01",
+  "repository": "hangikredi.revolt.fe.next",
   "date": "2026-09-01",
   "codexVersion": "codex-cli 0.149.0-alpha.4.3",
   "model": "gpt-5.6-sol",

@@ -31,6 +31,34 @@
       ]
     },
     {
+      "id": "HOFNFAF9-E02",
+      "job": "lookup",
+      "strict": true,
+      "question": "Konut kredisi sayfası hangi route ve source dosyasındadır?",
+      "strictFact": "/loan/housingloan -> src/app/(baselayout)/loan/housingloan/page.tsx",
+      "forbiddenClaims": [
+        "/kredi/konut-kredisi is the source route"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/(baselayout)/loan/housingloan/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/(baselayout)/loan/housingloan/page.tsx"
+      ],
+      "budgetGate": {
+        "maxEngineChars": 2200,
+        "maxCitedButNotExpected": 4,
+        "requireCheaperThanBaseline": true
+      },
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
       "id": "HOFNFAF9-F01",
       "job": "flow",
       "strict": false,

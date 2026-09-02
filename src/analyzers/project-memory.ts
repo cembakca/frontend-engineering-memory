@@ -81,6 +81,65 @@ function lineOf(source:ts.SourceFile,node:ts.Node):number {
   return source.getLineAndCharacterOfPosition(node.getStart(source)).line+1;
 }
 
+export interface RouteRewriteRule {
+  kind:"rewrites"|"redirects"|"headers";
+  source:string;
+  destination:string|null;
+  file:string;
+  line:number;
+}
+
+const RULE_KEYS=new Set(["rewrites","redirects","headers"]);
+
+/**
+ * Routing rules are recognised by their shape (`{source, destination}`), not by
+ * the file that happens to hold them: a project may declare them inline in
+ * `next.config.*` or in a separate `rewrites.config.ts` that the config imports.
+ * Only the first form used to be indexed, which hid every localized public URL
+ * of the projects that split the file out.
+ */
+export function extractRouteRewrites(sourceFile:string,content:string):RouteRewriteRule[] {
+  const source=ts.createSourceFile(sourceFile,content,ts.ScriptTarget.Latest,true,
+    sourceFile.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  const out:RouteRewriteRule[]=[];
+  const visit=(node:ts.Node,kind:RouteRewriteRule["kind"]|null):void=>{
+    let scope=kind;
+    const named=ts.isPropertyAssignment(node)||ts.isMethodDeclaration(node)||ts.isFunctionDeclaration(node)
+      ||ts.isVariableDeclaration(node)||ts.isShorthandPropertyAssignment(node);
+    if (named&&"name" in node&&node.name) {
+      const key=node.name.getText().replace(/^['"]|['"]$/g,"");
+      if (RULE_KEYS.has(key)) scope=key as RouteRewriteRule["kind"];
+    }
+    if (ts.isObjectLiteralExpression(node)) {
+      const properties=new Map(node.properties.map((item)=>[propertyKey(item),item]));
+      const sourceProperty=properties.get("source");
+      if (sourceProperty&&ts.isPropertyAssignment(sourceProperty)) {
+        const from=staticSummary(sourceProperty.initializer) ?? sourceProperty.initializer.getText();
+        const destinationProperty=properties.get("destination");
+        const destination=destinationProperty&&ts.isPropertyAssignment(destinationProperty)
+          ? staticSummary(destinationProperty.initializer) ?? destinationProperty.initializer.getText() : null;
+        // A file that only declares rules carries no enclosing key to read the
+        // kind from, so it is inferred from the rule's own shape.
+        const inferred:RouteRewriteRule["kind"]=scope ?? (properties.has("permanent") ? "redirects"
+          : destination ? "rewrites" : "headers");
+        out.push({kind:inferred,source:from,destination,file:sourceFile,line:lineOf(source,node)});
+        return;
+      }
+    }
+    ts.forEachChild(node,(child)=>visit(child,scope));
+  };
+  visit(source,null);
+  return out;
+}
+
+function rewriteMemory(rule:RouteRewriteRule):MemoryCandidate {
+  const behavior=rule.destination ? `${rule.source} -> ${rule.destination}`
+    : rule.kind==="headers" ? `${rule.source} with response headers` : rule.source;
+  return {type:"next_config",subject:`${rule.file}:${rule.kind}:${rule.source}`,
+    content:`Next.js ${rule.kind} rule ${behavior}.`,confidence:"verified",sourceFile:rule.file,
+    startLine:rule.line,endLine:rule.line};
+}
+
 function analyzeNextConfig(sourceFile:string,content:string):MemoryCandidate[] {
   const source=ts.createSourceFile(sourceFile,content,ts.ScriptTarget.Latest,true,sourceFile.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS);
   const root=configObject(source);
@@ -93,25 +152,6 @@ function analyzeNextConfig(sourceFile:string,content:string):MemoryCandidate[] {
       const summary=staticSummary(property.initializer) ?? property.initializer.getText().replace(/\s+/g," ").slice(0,300);
       out.push({type:"next_config",subject:`${sourceFile}:${key}`,content:`Next.js configuration ${key} is set to ${summary}.`,confidence:"verified",sourceFile,startLine:lineOf(source,property),endLine:source.getLineAndCharacterOfPosition(property.getEnd()).line+1});
     }
-    if (!["rewrites","redirects","headers"].includes(key)) continue;
-    const visit=(node:ts.Node):void=>{
-      if (ts.isObjectLiteralExpression(node)) {
-        const properties=new Map(node.properties.map((item)=>[propertyKey(item),item]));
-        const sourceProperty=properties.get("source");
-        if (sourceProperty&&ts.isPropertyAssignment(sourceProperty)) {
-          const from=staticSummary(sourceProperty.initializer) ?? sourceProperty.initializer.getText();
-          const destinationProperty=properties.get("destination");
-          const destination=destinationProperty&&ts.isPropertyAssignment(destinationProperty)
-            ? staticSummary(destinationProperty.initializer) ?? destinationProperty.initializer.getText() : null;
-          const headerProperty=properties.get("headers");
-          const behavior=destination ? `${from} -> ${destination}` : headerProperty ? `${from} with response headers` : from;
-          out.push({type:"next_config",subject:`${sourceFile}:${key}:${from}`,content:`Next.js ${key} rule ${behavior}.`,confidence:"verified",sourceFile,startLine:lineOf(source,node),endLine:source.getLineAndCharacterOfPosition(node.getEnd()).line+1});
-          return;
-        }
-      }
-      ts.forEachChild(node,visit);
-    };
-    visit(property);
   }
   return out;
 }
@@ -122,13 +162,27 @@ export async function listProjectAnalysisFiles(repoPath:string):Promise<string[]
   const rootFiles=names.filter((name)=>
     /^Dockerfile(?:\..+)?$/.test(name) ||
     /^docker-compose.*\.ya?ml$/.test(name) ||
-    /^next\.config\.(?:ts|js|mjs|cjs)$/.test(name) ||
+    // Any root config module, not just next.config.*: routing rules are often
+    // split into rewrites.config.ts / redirects.config.ts.
+    /^[\w.-]*config\.(?:ts|js|mjs|cjs)$/.test(name) ||
     /^tsconfig\.json$/.test(name) ||
     /^\.env(?:\..+)?$/.test(name),
   );
   const staticMetadata=await walkFiles(repoPath,{extensions:new Set([".txt",".xml",".webmanifest"]),include:(file)=>
     /^(?:src\/)?app\/(?:.*\/)?(?:robots\.txt|sitemap\.xml|manifest\.webmanifest)$/.test(file)});
   return [...new Set([...rootFiles,...staticMetadata])].sort();
+}
+
+/** Every routing rule the repository declares, wherever it declares them. */
+export async function analyzeRouteRewrites(repoPath:string):Promise<RouteRewriteRule[]> {
+  const files=(await listProjectAnalysisFiles(repoPath)).filter((file)=>/config\.(?:ts|js|mjs|cjs)$/.test(file));
+  const rules:RouteRewriteRule[]=[];
+  for (const file of files) {
+    const content=await readTextIfSmall(path.join(repoPath,file),1_000_000);
+    if (content==null) continue;
+    rules.push(...extractRouteRewrites(file,content));
+  }
+  return rules;
 }
 
 export async function analyzeProjectFile(repoPath:string,sourceFile:string):Promise<MemoryCandidate[]> {
@@ -138,6 +192,9 @@ export async function analyzeProjectFile(repoPath:string,sourceFile:string):Prom
   const staticSpecial=sourceFile.match(/(?:^|\/)(robots\.txt|sitemap\.xml|manifest\.webmanifest)$/);
   if (staticSpecial) out.push({type:"special_file",subject:sourceFile,content:`${sourceFile} implements the static Next.js ${staticSpecial[1]} metadata file convention.`,confidence:"verified",sourceFile,startLine:1,endLine:content.split("\n").length});
   if (/^next\.config\.(?:ts|js|mjs|cjs)$/.test(sourceFile)) out.push(...analyzeNextConfig(sourceFile,content));
+  if (/^[\w.-]*config\.(?:ts|js|mjs|cjs)$/.test(sourceFile)) {
+    for (const rule of extractRouteRewrites(sourceFile,content)) out.push(rewriteMemory(rule));
+  }
   if (/^Dockerfile/.test(sourceFile) || /^docker-compose/.test(sourceFile)) {
     const bases=[...content.matchAll(/^FROM\s+([^\s]+)/gm)].map((match)=>match[1]).filter(Boolean);
     out.push({type:"build",subject:sourceFile,content:`${sourceFile} defines container build/runtime${bases.length ? ` with base images ${bases.join(", ")}` : ""}.`,confidence:"verified",sourceFile,startLine:1,endLine:content.split("\n").length});

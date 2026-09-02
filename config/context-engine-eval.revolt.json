@@ -13,13 +13,35 @@
       "strict": true,
       "question": "Kart sihirbazı ana sayfası hangi route ve source dosyasındadır?",
       "strictFact": "/kart-sihirbazi -> src/app/kart-sihirbazi/page.tsx",
-      "forbiddenClaims": ["pages router"],
+      "forbiddenClaims": [
+        "pages router"
+      ],
       "policy": "memory-sufficient",
-      "expectedEvidence": ["src/app/kart-sihirbazi/page.tsx"],
-      "baselineReadSet": ["src/app/kart-sihirbazi/page.tsx"],
-      "baselineObserved": {"sourceToolChars": 17480, "discoveryToolChars": 0, "sourceFiles": 1, "provenance": "config/eval-observations/codex-rvt-e01-2026-09-01.json; median of three clean source-only Codex runs"},
-      "budgetGate": {"maxEngineChars": 1000, "maxCitedButNotExpected": 2, "requireCheaperThanBaseline": true},
-      "plan": [{"tool": "memory_route", "args": {"route": "/kart-sihirbazi"}}]
+      "expectedEvidence": [
+        "src/app/kart-sihirbazi/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/kart-sihirbazi/page.tsx"
+      ],
+      "baselineObserved": {
+        "sourceToolChars": 17480,
+        "discoveryToolChars": 0,
+        "sourceFiles": 1,
+        "provenance": "config/eval-observations/codex-rvt-e01-2026-09-01.json; median of three clean source-only Codex runs"
+      },
+      "budgetGate": {
+        "maxEngineChars": 1000,
+        "maxCitedButNotExpected": 2,
+        "requireCheaperThanBaseline": true
+      },
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "route": "/kart-sihirbazi"
+          }
+        }
+      ]
     },
     {
       "id": "RVT-E02",
@@ -27,11 +49,24 @@
       "strict": true,
       "question": "Kredi kartı ana sayfası hangi source dosyasından gelir?",
       "strictFact": "/kredi-karti -> src/app/kredi-karti/page.tsx",
-      "forbiddenClaims": ["src/pages"],
+      "forbiddenClaims": [
+        "src/pages"
+      ],
       "policy": "memory-sufficient",
-      "expectedEvidence": ["src/app/kredi-karti/page.tsx"],
-      "baselineReadSet": ["src/app/kredi-karti/page.tsx"],
-      "plan": [{"tool": "memory_route", "args": {"route": "/kredi-karti"}}]
+      "expectedEvidence": [
+        "src/app/kredi-karti/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/kredi-karti/page.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "route": "kredi kartı ana sayfası"
+          }
+        }
+      ]
     },
     {
       "id": "RVT-E03",
@@ -39,11 +74,24 @@
       "strict": true,
       "question": "Faizsiz fırsatlar sayfasının gerçek route ve dosyası nedir?",
       "strictFact": "/interest-free-deals -> src/app/interest-free-deals/page.tsx",
-      "forbiddenClaims": ["/sifir-faizli-firsatlar source route"],
+      "forbiddenClaims": [
+        "/sifir-faizli-firsatlar source route"
+      ],
       "policy": "memory-sufficient",
-      "expectedEvidence": ["src/app/interest-free-deals/page.tsx"],
-      "baselineReadSet": ["src/app/interest-free-deals/page.tsx"],
-      "plan": [{"tool": "memory_route", "args": {"route": "/interest-free-deals"}}]
+      "expectedEvidence": [
+        "src/app/interest-free-deals/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/interest-free-deals/page.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "route": "faizsiz fırsatlar"
+          }
+        }
+      ]
     },
     {
       "id": "RVT-E04",
@@ -51,11 +99,24 @@
       "strict": true,
       "question": "Ek hesap sayfası hangi route ve source dosyasından gelir?",
       "strictFact": "/credit/overdraft-account -> src/app/credit/overdraft-account/page.tsx",
-      "forbiddenClaims": ["/overdraft-account/page.tsx"],
+      "forbiddenClaims": [
+        "/overdraft-account/page.tsx"
+      ],
       "policy": "memory-sufficient",
-      "expectedEvidence": ["src/app/credit/overdraft-account/page.tsx"],
-      "baselineReadSet": ["src/app/credit/overdraft-account/page.tsx"],
-      "plan": [{"tool": "memory_route", "args": {"route": "/credit/overdraft-account"}}]
+      "expectedEvidence": [
+        "src/app/credit/overdraft-account/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/credit/overdraft-account/page.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "route": "ek hesap"
+          }
+        }
+      ]
     },
     {
       "id": "RVT-E05",
@@ -63,11 +124,108 @@
       "strict": true,
       "question": "Refresh-token POST handler'ı hangi dosyadadır?",
       "strictFact": "/api/next-api/revolt/auth/refresh-token",
-      "forbiddenClaims": ["client-only refresh"],
+      "forbiddenClaims": [
+        "client-only refresh"
+      ],
       "policy": "memory-sufficient",
-      "expectedEvidence": ["src/app/api/next-api/revolt/auth/refresh-token/route.ts"],
-      "baselineReadSet": ["src/app/api/next-api/revolt/auth/refresh-token/route.ts"],
-      "plan": [{"tool": "memory_route", "args": {"route": "/api/next-api/revolt/auth/refresh-token"}}]
+      "expectedEvidence": [
+        "src/app/api/next-api/revolt/auth/refresh-token/route.ts"
+      ],
+      "baselineReadSet": [
+        "src/app/api/next-api/revolt/auth/refresh-token/route.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_route",
+          "args": {
+            "route": "/api/next-api/revolt/auth/refresh-token"
+          }
+        }
+      ]
+    },
+    {
+      "id": "RVT-E06",
+      "job": "lookup",
+      "strict": true,
+      "question": "Kart sihirbazı ana sayfası hangi route ve source dosyasındadır?",
+      "strictFact": "/kart-sihirbazi -> src/app/kart-sihirbazi/page.tsx",
+      "forbiddenClaims": [
+        "pages router"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/kart-sihirbazi/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/kart-sihirbazi/page.tsx"
+      ],
+      "budgetGate": {
+        "maxEngineChars": 1800,
+        "maxCitedButNotExpected": 2,
+        "requireCheaperThanBaseline": true
+      },
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "id": "RVT-E07",
+      "job": "lookup",
+      "strict": true,
+      "question": "Ek hesap sayfası hangi route ve source dosyasından gelir?",
+      "strictFact": "/credit/overdraft-account -> src/app/credit/overdraft-account/page.tsx",
+      "forbiddenClaims": [
+        "/overdraft-account/page.tsx"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/credit/overdraft-account/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/credit/overdraft-account/page.tsx"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ],
+      "budgetGate": {
+        "requireCheaperThanBaseline": true,
+        "maxEngineChars": 1800,
+        "maxCitedButNotExpected": 2
+      }
+    },
+    {
+      "id": "RVT-E08",
+      "job": "lookup",
+      "strict": true,
+      "question": "Sıfır faizli fırsatlar sayfası hangi route ve source dosyasındadır?",
+      "strictFact": "/interest-free-deals -> src/app/interest-free-deals/page.tsx",
+      "forbiddenClaims": [
+        "/sifir-faizli-firsatlar is the source route"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/interest-free-deals/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/interest-free-deals/page.tsx"
+      ],
+      "budgetGate": {
+        "maxEngineChars": 2200,
+        "maxCitedButNotExpected": 4,
+        "requireCheaperThanBaseline": true
+      },
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-F01",
@@ -75,7 +233,9 @@
       "strict": false,
       "question": "Faizsiz fırsatlar sayfası ürün verisini hangi akışla alır?",
       "strictFact": "page.tsx -> getInterestOppList -> /pages/content/zero-interest-opportunity-list",
-      "forbiddenClaims": ["client component fetches the list directly"],
+      "forbiddenClaims": [
+        "client component fetches the list directly"
+      ],
       "policy": "targeted-source",
       "expectedEvidence": [
         "src/app/interest-free-deals/page.tsx",
@@ -85,9 +245,23 @@
         "src/app/interest-free-deals/page.tsx",
         "src/utils/api/services/interest-free-deals/list.ts"
       ],
-      "baselineObserved": {"sourceToolChars": 16103, "discoveryToolChars": 0, "sourceFiles": 3, "provenance": "config/eval-observations/codex-rvt-f01-2026-09-01.json; median of three clean source-only Codex runs"},
-      "budgetGate": {"maxEngineChars": 3000, "maxCitedButNotExpected": 2, "requireCheaperThanBaseline": true},
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "baselineObserved": {
+        "sourceToolChars": 16103,
+        "discoveryToolChars": 0,
+        "sourceFiles": 3,
+        "provenance": "config/eval-observations/codex-rvt-f01-2026-09-01.json; median of three clean source-only Codex runs"
+      },
+      "budgetGate": {
+        "maxEngineChars": 3000,
+        "maxCitedButNotExpected": 2,
+        "requireCheaperThanBaseline": true
+      },
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-F02",
@@ -95,7 +269,9 @@
       "strict": false,
       "question": "Ek hesap ana sayfası ürün verisini nereden ve hangi servis zinciriyle getirir?",
       "strictFact": "overdraft page -> getHomeOverDraftAccount",
-      "forbiddenClaims": ["static hard-coded product list"],
+      "forbiddenClaims": [
+        "static hard-coded product list"
+      ],
       "policy": "targeted-source",
       "expectedEvidence": [
         "src/app/credit/overdraft-account/page.tsx",
@@ -105,7 +281,12 @@
         "src/app/credit/overdraft-account/page.tsx",
         "src/utils/api/services/overdraftaccount/home.ts"
       ],
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-F03",
@@ -113,7 +294,9 @@
       "strict": false,
       "question": "Client token refresh isteği Next.js handler üzerinden OAuth endpoint'ine nasıl gider?",
       "strictFact": "CSRTokenRefresh -> refresh-token route -> API_SERVER_URL/auth-services/connect/token",
-      "forbiddenClaims": ["browser calls OAuth endpoint directly"],
+      "forbiddenClaims": [
+        "browser calls OAuth endpoint directly"
+      ],
       "policy": "targeted-source",
       "expectedEvidence": [
         "src/utils/libs/auth/token-refresh/client.ts",
@@ -123,7 +306,12 @@
         "src/utils/libs/auth/token-refresh/client.ts",
         "src/app/api/next-api/revolt/auth/refresh-token/route.ts"
       ],
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-I01",
@@ -131,7 +319,9 @@
       "strict": false,
       "question": "src/utils/libs/auth/token-refresh/client.ts değişirse hangi auth handler ve kullanıcı akışı etkilenir?",
       "strictFact": "CSR refresh flow and /api/next-api/revolt/auth/refresh-token",
-      "forbiddenClaims": ["all routes are affected"],
+      "forbiddenClaims": [
+        "all routes are affected"
+      ],
       "policy": "targeted-source",
       "expectedEvidence": [
         "src/utils/libs/auth/token-refresh/client.ts",
@@ -141,7 +331,12 @@
         "src/utils/libs/auth/token-refresh/client.ts",
         "src/app/api/next-api/revolt/auth/refresh-token/route.ts"
       ],
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-V01",
@@ -149,11 +344,23 @@
       "strict": true,
       "question": "Projenin automated-test ve doğrulama stratejisi nedir?",
       "strictFact": "package.json has build and lint scripts but no automated test runner script",
-      "forbiddenClaims": ["docker:test is an automated test suite", "dev:test is a test runner"],
+      "forbiddenClaims": [
+        "docker:test is an automated test suite",
+        "dev:test is a test runner"
+      ],
       "policy": "report-gap",
-      "expectedEvidence": ["package.json"],
-      "baselineReadSet": ["package.json"],
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "expectedEvidence": [
+        "package.json"
+      ],
+      "baselineReadSet": [
+        "package.json"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-P01",
@@ -161,7 +368,9 @@
       "strict": false,
       "question": "Faizsiz fırsatlardaki getInterestOppList ve React Query hydration pattern'ini izleyerek yeni ürün listeleme sayfası nasıl eklenmeli?",
       "strictFact": "Server page fetchQuery/getInterestOppList/dehydrate -> Hydrate -> page.client.tsx",
-      "forbiddenClaims": ["fetch the initial list only in useEffect"],
+      "forbiddenClaims": [
+        "fetch the initial list only in useEffect"
+      ],
       "policy": "targeted-source",
       "expectedEvidence": [
         "src/app/interest-free-deals/page.tsx",
@@ -172,7 +381,12 @@
         "src/utils/api/services/interest-free-deals/list.ts",
         "src/app/interest-free-deals/page.client.tsx"
       ],
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-D01",
@@ -180,11 +394,22 @@
       "strict": true,
       "question": "Client token refresh neden `No refresh token` döndürüp request atmadan çıkabilir?",
       "strictFact": "Neither token state nor middleware Set-Cookie contains a real refresh token",
-      "forbiddenClaims": ["OAuth endpoint returned invalid_grant"],
+      "forbiddenClaims": [
+        "OAuth endpoint returned invalid_grant"
+      ],
       "policy": "targeted-source",
-      "expectedEvidence": ["src/utils/libs/auth/token-refresh/client.ts"],
-      "baselineReadSet": ["src/utils/libs/auth/token-refresh/client.ts"],
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "expectedEvidence": [
+        "src/utils/libs/auth/token-refresh/client.ts"
+      ],
+      "baselineReadSet": [
+        "src/utils/libs/auth/token-refresh/client.ts"
+      ],
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     },
     {
       "id": "RVT-N01",
@@ -192,11 +417,20 @@
       "strict": true,
       "question": "Ekip neden Next.js 15'i seçti?",
       "strictFact": "No human-approved decision record supports the rationale",
-      "forbiddenClaims": ["performance reasons", "team preference", "migration requirement"],
+      "forbiddenClaims": [
+        "performance reasons",
+        "team preference",
+        "migration requirement"
+      ],
       "policy": "abstain",
       "expectedEvidence": [],
       "baselineReadSet": [],
-      "plan": [{"tool": "memory_context", "args": {}}]
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     }
   ]
 }

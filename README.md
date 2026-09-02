@@ -107,10 +107,10 @@ Copy the policy block from `config/AGENTS.memory.example.md` into the target rep
 After changes reach the indexed branch:
 
 ```bash
-pnpm memory sync-all
+pnpm sync:all
 ```
 
-`sync-all` isolates failures by repository. A clean repository with no new commit returns `NOOP`; changed repositories receive route reconciliation, incremental analysis, memory invalidation, and vector updates.
+`sync:all` (`pnpm memory sync-all`) isolates failures by repository. A clean repository with no new commit returns `NOOP`; changed repositories receive route reconciliation, incremental analysis, memory invalidation, and vector updates. `pnpm index:all` re-analyses every repository from scratch — needed after an analyzer change, since existing memories were written by the previous revision. `pnpm registry:sync` reconciles the registry itself: new entries are indexed, removed ones retired.
 
 Useful operational commands:
 

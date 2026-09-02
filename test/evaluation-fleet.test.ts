@@ -15,7 +15,7 @@ test("the checked-in fleet assigns both representatives and generated repository
   const result=await validateEvaluationFleet(file,{registryRepositories:["hangikredi.aboutus.fe.next","hangikredi.revolt.fe.next","hangikredi.orion.fe.next"]});
   assert.equal(result.validation.ok,true,result.validation.errors.join("\n"));
   assert.deepEqual(result.validation.suites.map((item)=>[item.role,item.cases]),
-    [["representative",15],["representative",13],["overlay",7]]);
+    [["representative",16],["representative",16],["overlay",8]]);
   assert.ok(result.validation.suites.filter((item)=>item.role==="representative")
     .every((item)=>["lookup","flow","impact","implementation","debug","verify","negative"].every((job)=>item.jobs.includes(job))));
   assert.ok(result.validation.suites.filter((item)=>item.role==="overlay")

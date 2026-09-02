@@ -71,6 +71,23 @@ test("UI boot stays lightweight and loads only the selected repository detail an
     const flow=await (await fetch(`${origin}/api/ui/flow/fixture?seed=${encodeURIComponent("src/app/page.tsx#Page")}`)).json() as any;
     assert.equal(flow.totalEdges,1);
     assert.equal(flow.steps[0].to,"src/data.ts#load");
+
+    const routes=await (await fetch(`${origin}/api/ui/routes/fixture?q=page`)).json() as any;
+    assert.equal(routes.total,1);
+    assert.equal(routes.routes[0].sourceFile,"src/app/page.tsx");
+    const route=await (await fetch(`${origin}/api/ui/route/fixture?route=${encodeURIComponent("/")}`)).json() as any;
+    assert.equal(route.route,"/");
+    assert.equal(route.sourceFile,"src/app/page.tsx");
+
+    const asked=await (await fetch(`${origin}/api/ui/ask/fixture`,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({question:"Ana route hangi source dosyasındadır?"}),
+    })).json() as any;
+    assert.equal(asked.pack.repository,"fixture");
+    assert.ok(asked.pack.telemetryEventId);
+    const economy=await (await fetch(`${origin}/api/ui/economy/fixture`)).json() as any;
+    assert.equal(economy.report.events,1);
+    assert.equal(economy.recent[0].tool,"memory_context");
   } finally {
     await new Promise<void>((resolve,reject)=>server.close((error)=>error ? reject(error) : resolve()));
     memoryDb.close();

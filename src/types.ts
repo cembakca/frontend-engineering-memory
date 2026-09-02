@@ -215,7 +215,7 @@ export interface SearchResult {
   sourceFiles?:string[];
   ranking?:{
     score:number;
-    features:{taskFit:number;relationCoverage:number;freshness:number;evidenceQuality:number;entitySpecificity:number;channelRelevance:number};
+    features:{taskFit:number;queryRelevance:number;relationCoverage:number;freshness:number;evidenceQuality:number;entitySpecificity:number;channelRelevance:number};
   };
 }
 

@@ -51,7 +51,15 @@ export async function buildAgentContext(
   const finish=(selected:typeof items,droppedForBudget=false)=>{
     const truncated=selected.length<Math.min(results.length,limit);
     const missingEvidence=selected.flatMap((item,index)=>item.evidence.length ? [] : [{path:`items[${index}]`,reason:"fact has no located source evidence"}]);
-    const fallback=[...new Set(selected.flatMap((item)=>item.evidence.map((entry:any)=>entry.file)).filter(Boolean))] as string[];
+    // Source fallback names files worth opening *because memory is imprecise
+    // there* — a fact whose evidence has no line, or a discovery hint when
+    // nothing matched. Listing the evidence files of well-located facts would
+    // make every answer look insufficient while adding nothing to open.
+    const fallback=(selected.length
+      ? selected.filter((item)=>item.evidence.length&&!item.evidence.some((entry:any)=>entry.startLine!=null))
+        .flatMap((item)=>item.evidence.map((entry:any)=>entry.file))
+      : results.flatMap((item)=>item.sourceFiles ?? (item.sourceFile ? [item.sourceFile] : [])).slice(0,4)
+    ).filter(Boolean) as string[];
     const answerContract=createAnswerContract({
       facts:selected.some((item)=>item.claimKind==="fact") ? ["items[claimKind=fact]"] : [],
       inferences:selected.some((item)=>item.claimKind==="inference") ? ["items[claimKind=inference]"] : [],
@@ -61,13 +69,20 @@ export async function buildAgentContext(
           : ["no matching memory was found"])],
       missingEvidence,sourceFallback:fallback,truncated,empty:!selected.length,
     });
+    const usedChars=0;
     const complete={...options.metadata,query,repository:options.repository ?? null,items:selected,
       guidance:selected.length ? "Follow answerContract."
         : droppedForBudget ? "Matches exist but exceed maxChars; raise the budget rather than reporting a miss."
         : "No match; report the miss and use targeted fallback.",
-      answerContract,characterBudget:maxChars,truncated,
+      answerContract,truncated,
       ...(droppedForBudget ? {budgetExceeded:true} : {})};
-    return {...complete,estimatedTokens:estimateTokens(complete)};
+    // Same budget shape as the compiled packs, so a caller (and the UI) reads
+    // one field regardless of which retrieval path produced the payload.
+    const withBudget={...complete,budget:{maxChars,usedChars,estimatedTokens:0,truncated,omitted:{}}};
+    const measured=JSON.stringify(withBudget).length;
+    withBudget.budget.usedChars=measured;
+    withBudget.budget.estimatedTokens=Math.ceil(measured/3.5);
+    return {...withBudget,estimatedTokens:estimateTokens(withBudget)};
   };
   let complete=finish(items);
   let droppedForBudget=false;

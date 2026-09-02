@@ -60,7 +60,13 @@ test("exposes bounded read-only memory tools over MCP",async()=>{
     assert.ok(JSON.stringify(fullRoute.structuredContent).length<=1000);
     const search=await client.callTool({name:"memory_context",arguments:{repository:"fixture",question:"GATEWAY_URL configuration",maxChars:1500}});
     assert.equal((search.structuredContent as any).items[0].subject,"GATEWAY_URL");
-    assert.ok((search.structuredContent as any).estimatedTokens<400);
+    // Bounded against the budget it declares, not against a magic constant.
+    assert.ok((search.structuredContent as any).estimatedTokens<=Math.ceil(1500/3.5));
+    // Same budget shape as the compiled packs, fitted below the requested
+    // maxChars so the telemetry annotation the tool adds still fits inside it.
+    const searchBudget=(search.structuredContent as any).budget;
+    assert.ok(searchBudget.maxChars<1500&&searchBudget.maxChars>=1400);
+    assert.ok(searchBudget.usedChars<=searchBudget.maxChars);
     assert.deepEqual((search.structuredContent as any).answerContract.facts,["items[claimKind=fact]"]);
     assert.ok(JSON.stringify(search.structuredContent).length<=1500,`lookup pack used ${JSON.stringify(search.structuredContent).length} chars`);
     assert.equal((search.structuredContent as any).freshness.state,"unknown","every pack declares its freshness (RCE-026)");

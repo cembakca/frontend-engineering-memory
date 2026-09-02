@@ -10,28 +10,31 @@
     cache: 44, build: 210, security: 4, repository_profile: 288, technical_debt: 14,
     performance_observation: 96, business_capability: 74, design_system: 240 };
 
-  async function api(path) {
-    const response = await fetch(path, { headers: { accept: "application/json" } });
+  async function api(path, options = {}) {
+    const response = await fetch(path, { ...options, headers: { accept: "application/json", ...(options.headers || {}) } });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `${response.status} ${response.statusText}`);
     return payload;
   }
 
-  const state = { projects: [], current: null, view: null };
+  const state = { projects: [], current: null, view: null, selection: null };
 
   /* ---------------- rail ---------------- */
   function renderRail() {
     const nav = $("#projects");
     nav.innerHTML = "";
-    for (const project of state.projects) {
+    const projects = matchMedia("(max-width:900px)").matches
+      ? [...state.projects].sort((a, b) => Number(b.name === state.current) - Number(a.name === state.current))
+      : state.projects;
+    for (const project of projects) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "project";
       button.setAttribute("aria-current", String(project.name === state.current));
-      const freshness = project.freshness ? project.freshness.state : "unknown";
+      const freshness = project.freshness ? project.freshness.state : "idle";
       button.innerHTML =
         `<span class="pname">${esc(project.name)}</span>` +
-        `<span class="pmeta"><span><i class="dot ${esc(freshness)}"></i>${esc(freshness)}</span>` +
+        `<span class="pmeta"><span><i class="dot ${esc(freshness)}"></i>${esc(freshness === "idle" ? "not loaded" : freshness)}</span>` +
         (project.facts == null
           ? `<span>${esc(project.framework || "repository")}</span></span>`
           : `<span>${project.facts} facts</span><span>${project.routes} routes</span></span>`);
@@ -296,6 +299,244 @@
       `<div>configuration on the path <b>${payload.config.length ? esc(payload.config.join(", ")) : "none"}</b></div>`;
   }
 
+  /* ---------------- ask memory ---------------- */
+  const PROMPTS = [
+    ["route lookup", "Kart sihirbazı ana sayfası hangi route ve source dosyasındadır?"],
+    ["data flow", "Faizsiz fırsatlar sayfası ürün verisini hangi akışla alır?"],
+    ["impact", "Refresh-token client değişirse hangi handler ve kullanıcı akışı etkilenir?"],
+    ["verify", "Bu repository'de hangi test, typecheck ve build doğrulamaları çalıştırılabilir?"],
+  ];
+
+  function packEvidence(pack) {
+    const rows = [];
+    const add = (label, source, meta) => rows.push({ label: String(label || "unnamed evidence"), source: source || "", meta: meta || "" });
+    for (const item of pack.items || []) add(item.subject || item.entity, item.sourceFile || (item.sourceFiles || []).join(", "), item.type || item.content);
+    for (const item of pack.steps || []) add(`${item.relation || item.edge || "step"} → ${item.to}`, item.evidence?.file, [item.evidence?.line, item.evidence?.symbol].filter(Boolean).join(" · "));
+    for (const item of pack.facts || []) add(item.fact || item.entity, (item.evidence || []).map((e) => e.file).join(", "), item.type);
+    for (const item of pack.exemplars || []) add(item.fact || item.entity, (item.evidence || []).map((e) => e.file).join(", "), item.type);
+    for (const item of pack.relations || []) add(item.affected || item.packageName || item.dependency, item.evidence?.file, item.relation || item.direction);
+    for (const item of pack.changes || []) add(`${item.operation}: ${item.entity}`, item.file, `${item.fromSha || "?"} → ${item.toSha || "?"}`);
+    for (const item of pack.verification?.commands || []) add(item.command, item.evidence?.file, item.kind);
+    for (const item of pack.verification?.tests || []) add(item.key, item.evidence?.file, item.framework);
+    if (pack.routeContext) add(pack.routeContext.route, pack.routeContext.sourceFile, "route context");
+    if (pack.route) add(pack.route.route, pack.route.sourceFile, [pack.route.type, pack.route.rendering, pack.route.router && `${pack.route.router} router`].filter(Boolean).join(" · "));
+    for (const item of pack.route?.renderingEvidence || []) add(item.split(":")[0], item, "rendering evidence");
+    for (const item of pack.route?.controlFlow || []) add(`${item.kind}${item.target ? ` → ${item.target}` : ""}`, pack.route.sourceFile, item.conditional ? "conditional" : "unconditional");
+    for (const item of pack.relatedRoutes || []) add(item.route, item.sourceFile, "related route");
+    return rows.slice(0, 30);
+  }
+
+  function renderPack(root, repository, response) {
+    const pack = response.pack;
+    const contract = pack.answerContract || { uncertainty: { level: "insufficient", reasons: [] }, sourceFallback: [] };
+    const level = contract.uncertainty?.level || "insufficient";
+    const fallback = contract.sourceFallback || [];
+    const rounds = pack.retrieval;
+    // Three distinct states, not two: memory answered on its own; memory
+    // answered but the plan opened its recovery round and offers files to read;
+    // memory could not answer. Collapsing the middle one into "partial" made a
+    // deliberate targeted-source policy look like an uncertain answer.
+    const status = level === "none" && fallback.length === 0 ? { tone: "good", label: "memory sufficient" }
+      : level !== "insufficient" && fallback.length ? { tone: "info", label: "targeted source" }
+      : { tone: level === "partial" ? "warn" : "bad", label: level };
+    const evidence = packEvidence(pack);
+    const budget = pack.budget || {};
+    const output = slot(root, "askOutput");
+    output.hidden = false;
+    output.innerHTML =
+      `<div class="pack-head"><div class="pack-kind">${esc(String(pack.kind || "context").replace(/-/g, " "))}` +
+        `<small>${esc(pack.snapshotSha ? pack.snapshotSha.slice(0, 10) : "no snapshot")} · telemetry #${esc(pack.telemetryEventId || "—")}` +
+        `${pack.retrieval ? ` · ${esc((pack.retrieval.rounds || []).join(" → "))}${pack.retrieval.resolvedBy ? ` · ${esc(pack.retrieval.resolvedBy)}` : ""}` : ""}</small></div>` +
+        `<span class="contract-badge ${status.tone}">${esc(status.label)}</span></div>` +
+      `<div class="pack-stats">` +
+        `<div class="pack-stat"><b>${budget.usedChars ?? JSON.stringify(pack).length}</b><span>payload chars</span></div>` +
+        `<div class="pack-stat"><b>${budget.estimatedTokens ?? Math.ceil((budget.usedChars ?? JSON.stringify(pack).length) / 3.5)}</b><span>estimated tokens</span></div>` +
+        `<div class="pack-stat"><b>${response.durationMs}</b><span>compile ms</span></div>` +
+        `<div class="pack-stat"><b>${fallback.length}</b><span>source fallbacks</span></div></div>` +
+      `<div class="pack-columns"><section class="pack-section"><div class="pack-section-head"><h3>Returned evidence</h3><span>${evidence.length} visible claims</span></div>` +
+        `<ul class="evidence-list">${evidence.length ? evidence.map((item) => `<li><span class="claim">${esc(item.label)}</span>` +
+          `<span class="source">${esc(item.source || "derived relation")}${item.meta ? ` · ${esc(item.meta)}` : ""}</span></li>`).join("") : `<li><span class="source">No evidence returned.</span></li>`}</ul></section>` +
+      `<section class="pack-section"><div class="pack-section-head"><h3>Answer contract</h3><span>${esc(level)}</span></div>` +
+        `<ul class="contract-list"><li><b>facts</b> ${(contract.facts || []).length}</li><li><b>derived relations</b> ${(contract.derivedRelations || []).length}</li>` +
+        `<li><b>inferences</b> ${(contract.inferences || []).length}</li>` +
+        `${(contract.uncertainty?.reasons || []).map((reason) => `<li>uncertainty · ${esc(reason)}</li>`).join("")}` +
+        `${rounds ? `<li><b>rounds</b> ${esc((rounds.rounds || []).join(" → "))}${rounds.secondRound?.run
+          ? `<br>second round · ${esc((rounds.secondRound.triggers || []).join(", "))}` : ""}</li>` : ""}` +
+        `${fallback.map((item) => `<li><b>fallback ${item.priority}</b><br>${esc(item.file)} · ${esc(item.reason)}</li>`).join("")}</ul>` +
+        `<div class="feedback-row" data-event="${esc(pack.telemetryEventId || "")}"><button type="button" data-signal="sufficient">Sufficient</button>` +
+        `<button type="button" data-signal="source-needed">Source needed</button><button type="button" data-signal="wrong">Wrong</button></div></section></div>` +
+      `<details class="raw-pack"><summary>Inspect raw bounded pack</summary><pre>${esc(JSON.stringify(pack, null, 2))}</pre></details>`;
+    output.querySelectorAll("[data-signal]").forEach((button) => button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await api("/feedback", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+          repository, retrievalEventId: pack.telemetryEventId, signal: button.dataset.signal, reporter: "browser-ui",
+        }) });
+        button.textContent = "Recorded";
+      } catch (error) { button.textContent = error.message; button.disabled = false; }
+    }));
+  }
+
+  function mountAsk(root, repository) {
+    const form = slot(root, "askForm");
+    const input = slot(root, "askInput");
+    const status = slot(root, "askStatus");
+    const submit = form.querySelector("button[type=submit]");
+    slot(root, "askPresets").innerHTML = PROMPTS.map(([label, prompt]) =>
+      `<button type="button" class="preset" data-prompt="${esc(prompt)}">${esc(label)}</button>`).join("");
+    slot(root, "askPresets").querySelectorAll("[data-prompt]").forEach((button) => button.addEventListener("click", () => {
+      input.value = button.dataset.prompt; input.focus();
+    }));
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const question = input.value.trim();
+      if (question.length < 3) return input.focus();
+      submit.disabled = true;
+      status.textContent = "compiling bounded context · checking indexed evidence…";
+      try {
+        const response = await api(`/api/ui/ask/${encodeURIComponent(repository)}`, { method: "POST",
+          headers: { "content-type": "application/json" }, body: JSON.stringify({ question }) });
+        renderPack(root, repository, response);
+        const pack = response.pack;
+        status.textContent = `${pack.kind || "context"} · ${response.durationMs} ms · ${pack.budget?.usedChars || JSON.stringify(pack).length} chars · ${(pack.answerContract?.sourceFallback || []).length} source fallback`;
+      } catch (error) { status.textContent = `query failed · ${error.message}`; }
+      finally { submit.disabled = false; }
+    });
+  }
+
+  /* ---------------- route explorer ---------------- */
+  const tokens = (values) => values && values.length
+    ? `<div class="token-list">${values.map((value) => `<code>${esc(typeof value === "string" ? value : JSON.stringify(value))}</code>`).join("")}</div>`
+    : `<p class="hint">None recorded.</p>`;
+
+  function renderRouteDetail(root, detail) {
+    const scope = detail.dependencyScope || { direct: [], inherited: [] };
+    const dependencies = [...(scope.direct || []).slice(0, 12).map((item) => ({ ...item, scope: "direct" })),
+      ...(scope.inherited || []).filter((item, index, all) => all.findIndex((other) => other.name === item.name && other.usage_type === item.usage_type) === index)
+        .slice(0, 8).map((item) => ({ ...item, scope: "inherited" }))];
+    const routeDirectory = detail.sourceFile.slice(0, detail.sourceFile.lastIndexOf("/"));
+    const localBoundaries = (detail.clientBoundaries || []).filter((file) => file.startsWith(`${routeDirectory}/`));
+    const clientBoundaries = (localBoundaries.length ? localBoundaries : detail.clientBoundaries || []).slice(0, 12);
+    slot(root, "routeDetail").innerHTML =
+      `<div class="eyebrow">${esc(detail.type)} · ${esc(detail.router)} router</div><h3>${esc(detail.route)}</h3>` +
+      `<div class="source-line">${esc(detail.sourceFile)}</div>` +
+      `<div class="detail-facts"><div class="detail-fact"><b>${esc(detail.rendering)}</b><span>rendering</span></div>` +
+      `<div class="detail-fact"><b>${detail.serverComponent == null ? "unknown" : detail.serverComponent ? "server" : "client"}</b><span>component boundary</span></div>` +
+      `<div class="detail-fact"><b>${detail.authRequired == null ? "unknown" : detail.authRequired ? "required" : "public"}</b><span>authentication</span></div></div>` +
+      `<section class="detail-section"><h4>Control flow</h4>${tokens(detail.controlFlow)}</section>` +
+      `<section class="detail-section"><h4>Layout chain</h4>${tokens(detail.layoutChain)}</section>` +
+      `<section class="detail-section"><h4>Local client boundaries · ${clientBoundaries.length}</h4>${tokens(clientBoundaries)}</section>` +
+      `<section class="detail-section"><h4>Data sources</h4>${tokens(detail.dataSources)}</section>` +
+      `<section class="detail-section"><h4>Backend dependencies</h4>${tokens(detail.backendDependencies)}</section>` +
+      `<section class="detail-section"><h4>Cache behavior</h4>${tokens(detail.cacheBehavior)}</section>` +
+      `<section class="detail-section"><h4>Dependency scope · ${scope.direct?.length || 0} direct / ${scope.inherited?.length || 0} inherited</h4>` +
+        (dependencies.length ? `<table class="dependency-table"><tbody>${dependencies.map((item) => `<tr><td>${esc(item.scope)} · ${esc(item.usage_type || item.dependency_type || "dependency")}</td><td>${esc(item.name || item.source_file || "—")}</td></tr>`).join("")}</tbody></table>` : `<p class="hint">No route dependency rows recorded.</p>`) + `</section>`;
+  }
+
+  function mountRoutes(root, repository) {
+    const form = slot(root, "routeSearchForm");
+    const input = slot(root, "routeSearchInput");
+    const list = slot(root, "routeList");
+    let timer;
+    const load = async () => {
+      list.innerHTML = `<div class="empty-state">loading structured routes…</div>`;
+      try {
+        const payload = await api(`/api/ui/routes/${encodeURIComponent(repository)}?q=${encodeURIComponent(input.value.trim())}`);
+        slot(root, "routeCount").textContent = `${payload.matched} matched · ${payload.total} indexed`;
+        list.innerHTML = payload.routes.length ? payload.routes.map((route) =>
+          `<button type="button" class="route-row" aria-selected="false" data-route="${esc(route.route)}"><span class="route-path">${esc(route.route)}</span>` +
+          `<span class="route-source">${esc(route.sourceFile)}</span><span class="route-flags"><span class="route-flag">${esc(route.rendering)}</span>` +
+          `${route.authRequired ? '<span class="route-flag">auth</span>' : ""}${route.dataSources ? `<span class="route-flag">${route.dataSources} data</span>` : ""}</span></button>`).join("")
+          : `<div class="empty-state">No route matches this filter.</div>`;
+        list.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", async () => {
+          list.querySelectorAll("[data-route]").forEach((row) => row.setAttribute("aria-selected", "false"));
+          button.setAttribute("aria-selected", "true");
+          slot(root, "routeDetail").innerHTML = `<p class="hint">loading ${esc(button.dataset.route)}…</p>`;
+          try { renderRouteDetail(root, await api(`/api/ui/route/${encodeURIComponent(repository)}?route=${encodeURIComponent(button.dataset.route)}`)); }
+          catch (error) { slot(root, "routeDetail").innerHTML = `<p class="hint">${esc(error.message)}</p>`; }
+        }));
+      } catch (error) { list.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; }
+    };
+    form.addEventListener("submit", (event) => { event.preventDefault(); load(); });
+    input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 180); });
+    load();
+  }
+
+  /* ---------------- economy ---------------- */
+  const percent = (value) => Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}%` : "—";
+  function observationSavings(observation) {
+    const value = observation.savingsPercent || {};
+    return {
+      input: value.inputTokens ?? value.inputPercent,
+      uncached: value.uncachedInputTokens ?? value.uncachedInputPercent,
+      payload: value.toolChars ?? value.toolPayloadPercent,
+      time: value.wallTime ?? value.latencyPercent,
+    };
+  }
+  function savingBar(label, value) {
+    const width = Math.max(0, Math.min(100, Number(value) || 0));
+    return `<div class="saving"><span>${esc(label)}</span><b>${percent(value)}</b><i><span style="width:${width}%"></span></i></div>`;
+  }
+  async function mountEconomy(root, repository) {
+    slot(root, "economySummary").innerHTML = `<div class="empty-state">loading retrieval ledger…</div>`;
+    try {
+      const payload = await api(`/api/ui/economy/${encodeURIComponent(repository)}`);
+      const report = payload.report;
+      const fallbacks = report.byFallback || {};
+      const sufficient = report.events ? ((fallbacks.none || 0) / report.events) * 100 : 0;
+      slot(root, "economySummary").innerHTML =
+        `<div class="economy-card"><div class="value">${report.events}</div><div class="label">retrieval events</div><div class="note">latest retained sample</div></div>` +
+        `<div class="economy-card good"><div class="value">${percent(sufficient)}</div><div class="label">no fallback</div><div class="note">memory answered alone</div></div>` +
+        `<div class="economy-card"><div class="value">${report.estimatedTokens?.p50 ?? "—"}</div><div class="label">median pack tokens</div><div class="note">engine estimate, not billing</div></div>` +
+        `<div class="economy-card"><div class="value">${report.latencyMs?.p50 ?? "—"} ms</div><div class="label">median retrieval</div><div class="note">p95 ${report.latencyMs?.p95 ?? "—"} ms</div></div>`;
+      slot(root, "eventCount").textContent = `${payload.recent.length} shown`;
+      slot(root, "events").innerHTML = payload.recent.length ? payload.recent.map((event) =>
+        `<div class="event"><time>${esc(String(event.created_at || "").slice(5, 16))}</time><span class="event-kind"><b>${esc(event.pack_kind || event.tool)}</b>` +
+        `<span>${esc(event.intent || "unknown")} · ${esc(event.fallback || "none")}</span></span><span class="event-cost"><b>${event.estimated_tokens}</b><span>tok · ${event.latency_ms}ms</span></span></div>`).join("")
+        : `<div class="empty-state">No retrieval telemetry yet. Ask Memory will create the first event.</div>`;
+      slot(root, "observations").innerHTML = payload.observations.length ? payload.observations.map((observation) => {
+        const saving = observationSavings(observation);
+        return `<article class="observation"><div class="observation-title"><b>${esc(observation.caseId)}</b><span>${esc(observation.model || "model unknown")} · ${esc(observation.date || "")}</span></div>` +
+          `<p class="observation-prompt">${esc(observation.prompt || "Controlled retrieval observation")}</p><div class="saving-bars">` +
+          savingBar("input", saving.input) + savingBar("uncached", saving.uncached) + savingBar("tool payload", saving.payload) + savingBar("wall time", saving.time) + `</div></article>`;
+      }).join("") : `<div class="empty-state">No checked-in Codex A/B observation is linked to this repository.</div>`;
+    } catch (error) { slot(root, "economySummary").innerHTML = `<div class="empty-state">${esc(error.message)}</div>`; }
+  }
+
+  async function mountLab(root, repository) {
+    mountFlow(root, repository);
+    try {
+      const projection = await api(`/api/ui/projection/${encodeURIComponent(repository)}`);
+      if (state.current !== repository) return;
+      slot(root, "stamp").innerHTML = slot(root, "stamp").innerHTML.replace(
+        "embedding <b>deferred</b>", `embedding <b>${projection.dimension}-dim</b>`);
+      const project = state.projects.find((item) => item.name === repository);
+      renderMetrics(root, project, projection);
+      if (projection.points.length >= 3) mountPlot(root, projection, repository);
+      else slot(root, "inspect").innerHTML = `<p class="hint">This index has no embeddings, so there is nothing to project.<br>Re-index with MEMORY_EMBEDDINGS_ENABLED=1.</p>`;
+    } catch (error) { slot(root, "pcaNote").textContent = `projection unavailable: ${error.message}`; }
+  }
+
+  function mountWorkspace(root, repository) {
+    const valid = new Set(["ask", "routes", "economy", "lab"]);
+    const requested = new URL(location.href).searchParams.get("view");
+    const initial = valid.has(requested) ? requested : "ask";
+    const activate = (name) => {
+      root.querySelectorAll("[data-view]").forEach((button) => button.setAttribute("aria-selected", String(button.dataset.view === name)));
+      root.querySelectorAll("[data-panel]").forEach((panel) => { panel.hidden = panel.dataset.panel !== name; });
+      const url = new URL(location.href); url.searchParams.set("view", name); history.replaceState(null, "", url);
+      const panel = root.querySelector(`[data-panel="${name}"]`);
+      if (panel.dataset.mounted) return;
+      panel.dataset.mounted = "1";
+      if (name === "ask") mountAsk(root, repository);
+      else if (name === "routes") mountRoutes(root, repository);
+      else if (name === "economy") mountEconomy(root, repository);
+      else mountLab(root, repository);
+    };
+    root.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => activate(button.dataset.view)));
+    activate(initial);
+  }
+
   /* ---------------- project view ---------------- */
   async function select(name) {
     const selection = Symbol(name);
@@ -331,25 +572,14 @@
       `repository <b>${esc(project.name)}</b><br>` +
       `snapshot &nbsp;<b>${esc(String(project.lastIndexedSha || "—").slice(0, 10))}</b><br>` +
       `indexed &nbsp;&nbsp;<b>${esc(project.lastIndexedAt || "—")}</b><br>` +
-      `embedding <b>loading</b> · local`;
+      `embedding <b>deferred</b> · local`;
 
     renderMetrics(view, project, null);
     main.innerHTML = "";
     main.appendChild(view);
 
     const mounted = main;
-    mountFlow(mounted, name);
-    try {
-      const projection = await api(`/api/ui/projection/${encodeURIComponent(name)}`);
-      if (state.selection !== selection) return;
-      slot(mounted, "stamp").innerHTML = slot(mounted, "stamp").innerHTML.replace(
-        "embedding <b>loading</b>", `embedding <b>${projection.dimension}-dim</b>`);
-      renderMetrics(mounted, project, projection);
-      if (projection.points.length >= 3) mountPlot(mounted, projection, name);
-      else slot(mounted, "inspect").innerHTML = `<p class="hint">This index has no embeddings, so there is nothing to project.<br>Re-index with MEMORY_EMBEDDINGS_ENABLED=1.</p>`;
-    } catch (error) {
-      slot(mounted, "pcaNote").textContent = `projection unavailable: ${error.message}`;
-    }
+    mountWorkspace(mounted, name);
   }
 
   /* ---------------- boot ---------------- */

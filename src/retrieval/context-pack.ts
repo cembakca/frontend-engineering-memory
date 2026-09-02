@@ -25,8 +25,16 @@ interface BasePack {
   snapshotSha:string|null;
   /** RCE-026: every pack states the freshness of the snapshot it was built from. */
   freshness?:Record<string,unknown>;
+  /** RCE-015: which planned rounds actually ran, and what opened the second one. */
+  retrieval?:RetrievalRounds;
   budget:PackBudget;
   answerContract:AnswerContract;
+}
+
+export interface RetrievalRounds {
+  rounds:string[];
+  secondRound:{run:boolean;triggers:string[]};
+  resolvedBy?:string;
 }
 
 interface PackEvidence { file:string; line:number|null; symbol:string|null; confidence:string|null }
@@ -88,7 +96,8 @@ export interface ChangeReviewContextPack extends BasePack {
 
 export type ContextPack=FlowContextPack|ImpactContextPack|ImplementationContextPack|DebugContextPack|ChangeReviewContextPack;
 
-interface CommonInput { query:string;repository:string;snapshotSha?:string|null;gaps?:string[];sourceFallback?:string[];freshness?:Record<string,unknown> }
+interface CommonInput { query:string;repository:string;snapshotSha?:string|null;gaps?:string[];sourceFallback?:string[];
+  freshness?:Record<string,unknown>;retrieval?:RetrievalRounds }
 export type ContextPackInput=
   |(CommonInput&{kind:"flow";trace:FlowTrace;routeContext?:{route:string;sourceFile:string;layouts:string[];clientBoundaries:string[]}})
   |(CommonInput&{kind:"impact";trace:ImpactTrace})
@@ -104,6 +113,7 @@ function base(input:CommonInput&{kind:ContextPackKind},maxChars:number):BasePack
   return {schemaVersion:SCHEMA_VERSION,kind:input.kind,query:input.query,repository:input.repository,
     snapshotSha:input.snapshotSha ?? null,
     ...(input.freshness ? {freshness:input.freshness} : {}),
+    ...(input.retrieval ? {retrieval:input.retrieval} : {}),
     budget:budget(maxChars),answerContract:createAnswerContract({})};
 }
 
@@ -191,43 +201,86 @@ function selectors(pack:ContextPack):{facts:string[];derivedRelations:string[];i
   return {facts,derivedRelations,inferences,uncertainty,missingEvidence};
 }
 
+/**
+ * Content sections in shedding order, least load-bearing first. Used only when
+ * the contract has nothing left to give and the pack still exceeds the budget
+ * it declares — a pack must never report a `maxChars` it has already broken.
+ */
+function shedableSections(pack:ContextPack):Array<[string,any[]]> {
+  if (pack.kind==="flow") return [["config",pack.config],["endpoints",pack.endpoints],["steps",pack.steps]];
+  if (pack.kind==="impact") return [...Object.entries(pack.affected).map(([key,value])=>[`affected.${key}`,value] as [string,any[]]),
+    ["relations",pack.relations]];
+  if (pack.kind==="implementation") return [["verification.gaps",pack.verification.gaps],["exemplars",pack.exemplars],
+    ...Object.entries(pack.editSurface).map(([key,value])=>[`editSurface.${key}`,value] as [string,any[]]),
+    ["verification.tests",pack.verification.tests],["verification.commands",pack.verification.commands]];
+  if (pack.kind==="debug") return [["config",pack.config],["endpoints",pack.endpoints],["checks",pack.checks],
+    ["failurePath",pack.failurePath],["facts",pack.facts]];
+  return [["verification.gaps",pack.verification.gaps],
+    ...Object.entries(pack.affected).map(([key,value])=>[`affected.${key}`,value] as [string,any[]]),
+    ["verification.tests",pack.verification.tests],["verification.commands",pack.verification.commands],["changes",pack.changes]];
+}
+
+function shedContent(pack:ContextPack):boolean {
+  const section=shedableSections(pack).find(([,value])=>value.length);
+  if (!section) return false;
+  section[1].pop();
+  pack.budget.truncated=true;
+  pack.budget.omitted[section[0]]=(pack.budget.omitted[section[0]] ?? 0)+1;
+  return true;
+}
+
 function finalize<T extends ContextPack>(pack:T,input:CommonInput,extraUncertainty:string[]=[]):T {
-  const claims=selectors(pack);
-  const uncertainty=[...(input.gaps ?? []),...extraUncertainty,...claims.uncertainty];
-  const missingEvidence=[...claims.missingEvidence];
-  const sourceFallback=[...(input.sourceFallback ?? [])];
-  const empty=!claims.facts.length&&!claims.derivedRelations.length&&!claims.inferences.length;
-  const rebuild=()=>{
-    pack.answerContract=createAnswerContract({...claims,uncertainty,missingEvidence,sourceFallback,
-      truncated:pack.budget.truncated,empty});
+  const baseUncertainty=[...(input.gaps ?? []),...extraUncertainty];
+  const allFallback=[...(input.sourceFallback ?? [])];
+  // Optional contract entries are dropped from the end under budget pressure.
+  // Counting the drops instead of mutating arrays keeps the contract correct
+  // when a later rebuild re-derives claims from a pack that has shed content.
+  let droppedFallback=0,droppedMissing=0,droppedUncertainty=0;
+  // What is left to give, measured against the inputs rather than against the
+  // rendered contract: `createAnswerContract` adds its own reasons (truncation,
+  // missing evidence), so a rendered reason list never empties and a loop that
+  // watched it would spin instead of shedding content.
+  let remaining={fallback:0,missing:0,uncertainty:0};
+  const measure=():number=>JSON.stringify(pack).length;
+  const rebuild=():void=>{
+    const claims=selectors(pack);
+    const uncertainty=[...baseUncertainty,...claims.uncertainty];
+    remaining={
+      fallback:Math.max(0,allFallback.length-droppedFallback),
+      missing:Math.max(0,claims.missingEvidence.length-droppedMissing),
+      uncertainty:Math.max(0,uncertainty.length-droppedUncertainty),
+    };
+    pack.answerContract=createAnswerContract({...claims,
+      uncertainty:uncertainty.slice(0,Math.max(0,uncertainty.length-droppedUncertainty)),
+      missingEvidence:claims.missingEvidence.slice(0,Math.max(0,claims.missingEvidence.length-droppedMissing)),
+      sourceFallback:allFallback.slice(0,Math.max(0,allFallback.length-droppedFallback)),
+      truncated:pack.budget.truncated,
+      empty:!claims.facts.length&&!claims.derivedRelations.length&&!claims.inferences.length});
+  };
+  const applyBudgetCounters=():void=>{
+    // Two passes: writing the counter changes the payload length it reports.
+    for (let attempt=0;attempt<3;attempt+=1) {
+      pack.budget.usedChars=measure();
+      pack.budget.estimatedTokens=Math.ceil(pack.budget.usedChars/3.5);
+    }
   };
   rebuild();
-  while (JSON.stringify(pack).length>pack.budget.maxChars&&(sourceFallback.length||missingEvidence.length||uncertainty.length)) {
-    if (sourceFallback.length) sourceFallback.pop();
-    else if (missingEvidence.length) missingEvidence.pop();
-    else uncertainty.pop();
-    pack.budget.truncated=true;
-    pack.budget.omitted.answerContract=(pack.budget.omitted.answerContract ?? 0)+1;
-    rebuild();
-  }
-  for (let attempt=0;attempt<3;attempt+=1) {
-    pack.budget.usedChars=JSON.stringify(pack).length;
-    pack.budget.estimatedTokens=Math.ceil(pack.budget.usedChars/CHARS_PER_TOKEN);
-  }
-  // Budget counter digit growth happens after the first contract fit. Remove
-  // one more optional contract entry when that final metadata crosses the cap.
-  for (let guard=0;JSON.stringify(pack).length>pack.budget.maxChars&&guard<100;guard+=1) {
-    if (sourceFallback.length) sourceFallback.pop();
-    else if (missingEvidence.length) missingEvidence.pop();
-    else if (uncertainty.length) uncertainty.pop();
+  applyBudgetCounters();
+  for (let guard=0;measure()>pack.budget.maxChars&&guard<400;guard+=1) {
+    let droppedContractEntry=true;
+    if (remaining.fallback) droppedFallback+=1;
+    else if (remaining.missing) droppedMissing+=1;
+    else if (remaining.uncertainty) droppedUncertainty+=1;
+    // The contract has nothing left to give: shed content rather than return a
+    // pack that reports a maxChars it has already broken.
+    else if (shedContent(pack)) droppedContractEntry=false;
     else break;
-    pack.budget.truncated=true;
-    pack.budget.omitted.answerContract=(pack.budget.omitted.answerContract ?? 0)+1;
-    rebuild();
-    for (let attempt=0;attempt<3;attempt+=1) {
-      pack.budget.usedChars=JSON.stringify(pack).length;
-      pack.budget.estimatedTokens=Math.ceil(pack.budget.usedChars/CHARS_PER_TOKEN);
+    if (droppedContractEntry) {
+      pack.budget.truncated=true;
+      pack.budget.omitted.answerContract=(pack.budget.omitted.answerContract ?? 0)+1;
     }
+    rebuild();
+    applyBudgetCounters();
   }
   return pack;
 }

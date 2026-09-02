@@ -87,6 +87,10 @@ function budgetRoutePayload(payload:any,maxChars:number):any {
 /** Stable identifiers a pack returned, so a retrieval miss can be traced without storing any content. */
 function packResultIds(pack:any):string[] {
   const ids:string[]=[];
+  // A structured route answer is a result; without this the telemetry recorded
+  // a correct route lookup as an abstention.
+  if (pack?.route?.route) ids.push(`route:${pack.route.route}`);
+  if (Array.isArray(pack?.relatedRoutes)) ids.push(...pack.relatedRoutes.map((row:any)=>`route:${row.route}`));
   if (Array.isArray(pack?.items)) ids.push(...pack.items.map((item:any)=>`${item.type}:${item.subject}`));
   if (Array.isArray(pack?.steps)) ids.push(...pack.steps.map((step:any)=>String(step.to ?? step.affected ?? "")));
   if (Array.isArray(pack?.relations)) ids.push(...pack.relations.map((row:any)=>String(row.affected ?? row.packageName ?? row.providerRepository ?? "")));
@@ -98,6 +102,9 @@ function packResultIds(pack:any):string[] {
   if (Array.isArray(pack?.verification?.tests)) ids.push(...pack.verification.tests.map((row:any)=>`test:${row.key}`));
   return ids.filter(Boolean);
 }
+
+/** `,"telemetryEventId":<id>` — annotation the tool adds to a finished pack. */
+const TELEMETRY_ANNOTATION_CHARS=48;
 
 function packResultCount(pack:any):number {
   return packResultIds(pack).length;
@@ -226,7 +233,7 @@ export class MemoryTools {
       // appending it afterwards would push the pack past the maxChars it declares.
       const freshness=await this.freshness.get(options.repository);
       const pack=await this.compiler.compile(question,
-        freshness ? {...options,freshness:packFreshness(freshness)} : options);
+        {...options,reserveChars:TELEMETRY_ANNOTATION_CHARS,...(freshness ? {freshness:packFreshness(freshness)} : {})});
       const serialized=JSON.stringify(pack);
       const uncertainty:string[]=pack?.answerContract?.uncertainty?.reasons ?? [];
       const fallback=(pack?.answerContract?.sourceFallback?.length ?? 0)>0 ? "targeted-source" as const

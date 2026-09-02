@@ -5,7 +5,8 @@ import type { MemoryType, RetrievalQuery, SearchResult } from "../types.js";
 import { understandQuery } from "./understand.js";
 import { canonicalEntityKey, rankAndDedupe } from "./ranking.js";
 import { planQuery } from "./query-plan.js";
-import { matchingQueryAliases, normalizeQueryAliases, type QueryAliases } from "./query-vocabulary.js";
+import { aliasRouteMatch, matchingQueryAliases, normalizeQueryAliases, type QueryAliases } from "./query-vocabulary.js";
+import { queryTerms, relevanceScore } from "./relevance.js";
 
 function repositoryAliasGroups(memoryDb:MemoryDatabase,repository?:string):QueryAliases[] {
   const rows=memoryDb.db.prepare(`SELECT query_aliases_json FROM repositories ${repository ? "WHERE name=?" : ""}`)
@@ -56,8 +57,16 @@ function sqlResults(memoryDb:MemoryDatabase,query:RetrievalQuery,limit:number):S
       FROM routes r JOIN repositories repo ON repo.id=r.repository_id
       WHERE r.active=1 ${query.repository ? "AND repo.name=?" : ""}
       ORDER BY repo.name,r.route LIMIT ?
-    `).all(...[...(query.repository ? [query.repository] : []),query.route ? 10000 : limit]) as any[];
-    const selected=query.route ? rows.filter((row)=>routesEquivalent(String(row.route),query.route!)).slice(0,limit) : rows;
+    `).all(...[...(query.repository ? [query.repository] : []),10000]) as any[];
+    // Channel rank becomes a ranking feature downstream, so the order handed to
+    // the ranker must be relevance, not the alphabet. Ordering by route name
+    // made every route lookup resolve to the repository's first route.
+    const terms=queryTerms(query.raw);
+    const selected=query.route
+      ? rows.filter((row)=>routesEquivalent(String(row.route),query.route!)).slice(0,limit)
+      : rows.map((row)=>({row,relevance:relevanceScore(terms,{subject:`route:${row.route}`,sourceFile:row.source_file})}))
+        .sort((a,b)=>b.relevance-a.relevance||String(a.row.route).localeCompare(String(b.row.route)))
+        .slice(0,limit).map((item)=>item.row);
     out.push(...selected.map((row,index)=>({
       id:-Number(row.id),repository:row.repository,type:"rendering" as const,subject:`route:${row.route}`,
       content:`Route ${row.route} uses ${row.router_type} router (${row.route_type}), renders as ${row.rendering_mode}; backend dependencies=${row.backend_dependencies_json}; cache=${row.cache_behavior_json}.`,
@@ -77,7 +86,8 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
   const combined=new Map<number,SearchResult>();
   if (query.channels.includes("sql")) sqlResults(memoryDb,query,limit*2).forEach((result,index)=>add(combined,result,index+1));
 
-  const fts=ftsQuery(rawQuery,repositoryAliasGroups(memoryDb,query.repository));
+  const aliasGroups=repositoryAliasGroups(memoryDb,query.repository);
+  const fts=ftsQuery(rawQuery,aliasGroups);
   if (fts && query.channels.includes("fts")) {
     const typeFilter=explicitTypes?.size ? `AND m.memory_type IN (${[...explicitTypes].map(()=>"?").join(",")})` : "";
     const params:unknown[]=[fts];
@@ -127,11 +137,17 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
       }
     } catch (error) { console.warn(`[search] vector channel failed, returning SQL/FTS results: ${(error as Error).message}`); }
   }
+  // A product name the registry maps to a route ("kart sihirbazı" → /kart-sihirbazi)
+  // is as exact an anchor as the path itself; only a confident match qualifies.
+  const aliasAnchor=plan.anchors.route ? undefined
+    : aliasRouteMatch(rawQuery,aliasGroups,[...new Set([...combined.values()]
+        .filter((result)=>result.subject.startsWith("route:")).map((result)=>result.subject.slice("route:".length)))]);
+  const anchorRoute=plan.anchors.route ?? (aliasAnchor&&aliasAnchor.strength>=6 ? aliasAnchor.route : undefined);
   for (const result of combined.values()) {
     if (boostedTypes?.has(result.type)) result.queryTypeBoost=.2;
     const key=canonicalEntityKey(result);
     result.exactAnchorMatch=Boolean(
-      (plan.anchors.route&&result.subject.startsWith("route:")&&routesEquivalent(result.subject.slice("route:".length),plan.anchors.route))
+      (anchorRoute&&result.subject.startsWith("route:")&&routesEquivalent(result.subject.slice("route:".length),anchorRoute))
       ||plan.anchors.config.some((anchor)=>key.endsWith(`:config:${anchor}`))
       ||plan.anchors.files.some((anchor)=>result.sourceFile===anchor||result.subject.startsWith(anchor))
       ||plan.anchors.symbols.some((anchor)=>result.subject===anchor),
@@ -139,5 +155,5 @@ export async function hybridSearch(memoryDb: MemoryDatabase, rawQuery: string, o
   }
   // Channel ranks are provenance/tie-break evidence; they are never summed.
   // Canonical entity, task fit, relations, freshness and evidence quality own ranking.
-  return rankAndDedupe([...combined.values()],query.intent,limit);
+  return rankAndDedupe([...combined.values()],query.intent,limit,queryTerms(rawQuery));
 }

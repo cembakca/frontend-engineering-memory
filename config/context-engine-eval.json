@@ -456,6 +456,35 @@
           "args": {}
         }
       ]
+    },
+    {
+      "id": "RCE-E09",
+      "job": "lookup",
+      "strict": true,
+      "question": "Kariyer sayfası hangi route ve source dosyasındadır?",
+      "strictFact": "/kariyer -> src/app/kariyer/page.tsx",
+      "forbiddenClaims": [
+        "pages router",
+        "src/pages"
+      ],
+      "policy": "memory-sufficient",
+      "expectedEvidence": [
+        "src/app/kariyer/page.tsx"
+      ],
+      "baselineReadSet": [
+        "src/app/kariyer/page.tsx"
+      ],
+      "budgetGate": {
+        "maxEngineChars": 1800,
+        "maxCitedButNotExpected": 2,
+        "requireCheaperThanBaseline": true
+      },
+      "plan": [
+        {
+          "tool": "memory_context",
+          "args": {}
+        }
+      ]
     }
   ],
   "note": "Plans exercise the three agent-facing MCP tools (RCE-019). Measuring a tool the server no longer exposes measures a path no agent can take."
