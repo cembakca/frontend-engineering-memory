@@ -1,4 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
+import { statSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { URL } from "node:url";
@@ -83,7 +84,22 @@ function enqueue<T>(job: () => Promise<T>): Promise<T> {
   return next;
 }
 
+/** Inode of a path right now, or null when it does not exist. */
+function inodeOf(file:string):number|null {
+  try { return statSync(file).ino; } catch { return null; }
+}
+
 export function startServer(memoryDb = new MemoryDatabase()): http.Server {
+  const databaseFile=memoryDb.db.name;
+  const openedInode=inodeOf(databaseFile);
+  const databaseState=()=>{
+    const current=inodeOf(databaseFile);
+    const stale=current===null||(openedInode!==null&&current!==openedInode);
+    return {path:databaseFile,stale,
+      ...(stale ? {reason:current===null
+        ? "the database file this server opened no longer exists; restart the server"
+        : "the database file was replaced since this server started; restart the server"} : {})};
+  };
   const store = new MemoryStore(memoryDb);
   const feedback = new AnswerFeedback(memoryDb);
   const telemetry = new RetrievalTelemetry(memoryDb);
@@ -102,7 +118,15 @@ export function startServer(memoryDb = new MemoryDatabase()): http.Server {
       // MCP over HTTP, for clients that connect by URL instead of spawning stdio.
       if (url.pathname === "/mcp") return void await mcp.node(req,res);
 
-      if (req.method === "GET" && url.pathname === "/health") return json(res,200,{ok:true,vectorEnabled:memoryDb.vectorEnabled});
+      if (req.method === "GET" && url.pathname === "/health") {
+        // A long-running server keeps serving a database that was deleted or
+        // replaced underneath it — the connection stays valid against the old
+        // inode, so answers go stale silently and clients see hangs rather than
+        // an error. Health states it instead.
+        const database=databaseState();
+        return json(res,database.stale ? 503 : 200,
+          {ok:!database.stale,vectorEnabled:memoryDb.vectorEnabled,database});
+      }
 
       // ---- browser UI ----
       if (req.method === "GET" && (url.pathname === "/" || url.pathname.startsWith("/ui"))) {

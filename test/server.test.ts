@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import { copyFileSync, unlinkSync } from "node:fs";
 import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
@@ -90,6 +91,49 @@ test("UI boot stays lightweight and loads only the selected repository detail an
     assert.equal(economy.recent[0].tool,"memory_context");
   } finally {
     await new Promise<void>((resolve,reject)=>server.close((error)=>error ? reject(error) : resolve()));
+    memoryDb.close();
+    await rm(dbRoot,{recursive:true,force:true});
+  }
+});
+
+test("health reports a database that was deleted or replaced under a running server",async()=>{
+  process.env.MEMORY_EMBEDDINGS_ENABLED="0";
+  process.env.MEMORY_HOST="127.0.0.1";
+  process.env.MEMORY_PORT="0";
+  const dbRoot=await mkdtemp(path.join(os.tmpdir(),"fem-server-stale-"));
+  const file=path.join(dbRoot,"memory.sqlite");
+  const memoryDb=new MemoryDatabase(file);
+  const server=startServer(memoryDb);
+  try {
+    if (!server.listening) await once(server,"listening");
+    const address=server.address();
+    assert.ok(address&&typeof address==="object");
+    const health=async()=>{
+      const response=await fetch(`http://127.0.0.1:${address.port}/health`);
+      return {status:response.status,body:await response.json() as any};
+    };
+
+    const fresh=await health();
+    assert.equal(fresh.status,200);
+    assert.equal(fresh.body.ok,true);
+    assert.equal(fresh.body.database.stale,false);
+
+    // A reset (or any out-of-band delete) leaves the connection valid against a
+    // file that is no longer there; the server would keep answering from it.
+    copyFileSync(file,`${file}.bak`);
+    unlinkSync(file);
+    const gone=await health();
+    assert.equal(gone.status,503);
+    assert.equal(gone.body.ok,false);
+    assert.match(gone.body.database.reason,/no longer exists/);
+
+    // Replaced by a different file: same path, different inode.
+    copyFileSync(`${file}.bak`,file);
+    const replaced=await health();
+    assert.equal(replaced.status,503);
+    assert.match(replaced.body.database.reason,/replaced since this server started/);
+  } finally {
+    server.close();
     memoryDb.close();
     await rm(dbRoot,{recursive:true,force:true});
   }
