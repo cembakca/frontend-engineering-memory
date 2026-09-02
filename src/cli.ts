@@ -23,6 +23,7 @@ import { TaskContextCompiler } from "./retrieval/task-context.js";
 import { readJson } from "./utils/fs.js";
 import type { DecisionInput } from "./memory/decisions.js";
 import { onboardRepository } from "./onboarding/onboard.js";
+import { resetMemory, type ResetScope } from "./memory/reset.js";
 
 function help(): void {
   console.log(`Frontend Engineering Memory
@@ -38,6 +39,7 @@ Commands:
   dependencies <repository>
   search <query> [--repo=<repository>] [--limit=10]
   quality [repository]
+  reset [--scope=all|index|telemetry] [--hard] [--yes]
   context-eval-all [evaluation-fleet.json] [--validate-only]
   eval-scaffold <repository> --family=<content-site|product-app>
   freshness [repository]
@@ -196,6 +198,18 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(rows,null,2));
     } else if (command === "quality") {
       console.log(JSON.stringify(store.qualityReport(args[0]),null,2));
+    } else if (command === "reset") {
+      // Irreversible, so it reports what it would destroy and does nothing
+      // until the caller confirms. --hard removes the database file itself.
+      const scope=(args.find((item)=>item.startsWith("--scope="))?.slice(8) ?? "all") as ResetScope;
+      if (!["all","index","telemetry"].includes(scope)) throw new Error(`Unknown reset scope: ${scope}`);
+      const confirm=args.includes("--yes")||args.includes("--confirm");
+      const result=await resetMemory(memoryDb,{scope,hard:args.includes("--hard"),confirm});
+      console.log(JSON.stringify({...result,
+        ...(result.performed ? {} : {note:"Nothing was deleted. Re-run with --yes to confirm."}),
+        ...(result.performed ? {next:"Rebuild with: pnpm index:all"} : {})},null,2));
+      if (!result.performed) process.exitCode=1;
+      if (result.hard&&result.performed) return; // the connection is already closed
     } else if (command === "embedding-status") {
       console.log(JSON.stringify({
         enabled:memoryDb.vectorEnabled,profile:memoryDb.embeddingProfile.id,model:memoryDb.embeddingProfile.model,
@@ -283,7 +297,8 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(await runContextEconomy({run:runArg?.slice(6),policyFile:policyArg?.slice(9)}),null,2));
     } else help();
   } finally {
-    if (command !== "serve") memoryDb.close();
+    // `reset --hard` deletes the file and closes the connection itself.
+    if (command !== "serve" && memoryDb.db.open) memoryDb.close();
   }
 }
 

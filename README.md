@@ -124,6 +124,24 @@ pnpm memory reconcile-all
 pnpm memory rollout-status
 ```
 
+### Throwing the index away
+
+```bash
+pnpm reset                      # report what would be destroyed; delete nothing
+pnpm reset --yes                # empty every table, keep the schema
+pnpm reset --scope=index --yes  # indexed knowledge only, keep telemetry and feedback
+pnpm reset --hard --yes         # delete the database file and its journals
+pnpm index:all                  # rebuild from the repositories
+```
+
+`reset` is irreversible and never runs without `--yes`: without it the command
+prints the row counts and repositories it would remove and exits non-zero.
+Indexed knowledge is reproducible — `index:all` rebuilds it from the
+repositories — but retrieval telemetry, answer feedback and approved decision
+records are not, which is why `--scope=index` exists. A hard reset removes the
+file the running configuration points at (`MEMORY_DB_PATH`); the schema is
+recreated on the next run.
+
 ### The registry is the only file you edit
 
 `config/repositories.json` is watched while `pnpm serve` runs. Saving it is the whole operation:
